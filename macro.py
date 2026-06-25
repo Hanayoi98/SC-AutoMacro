@@ -1287,7 +1287,7 @@ class Macro:
         log.info("═══ F8 ═══")
         try:
             self.inp.press("enter", d=0.01)
-            self.inp.paste_text("@태초")
+            _type_unicode("@태초", delay=0.01)
             self.inp.press("enter", d=0.01)
         except Exception as e:
             log.error("F8 오류: %s", e, exc_info=True)
