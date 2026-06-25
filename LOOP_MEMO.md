@@ -104,10 +104,10 @@ f9_early_branch_on=True → f7() 자동 실행
 ```
 key 이미지 대기 (무한, region_game)
 F2 → 2 → f6_pet_upgrade → 3 → f6_final_action  (딜레이: f7_step_delay)
-_f7_mouse_routine():  (마우스 이동: f7_mouse_move_dur / 클릭·키 딜레이: 고정 0.4s)
-  coord_a 이동 → 더블클릭(0.4s) → Q(0.4s)
-  coord_b 이동 → 더블클릭(0.4s) → Q(0.4s)
-  coord_c 이동 → (싱글클릭(0.4s) → Q(0.4s)) × 4
+_f7_mouse_routine():  (마우스 이동: f7_mouse_move_dur / 클릭·키 딜레이: 고정 0.45s)
+  coord_a 이동 → 더블클릭(0.45s) → Q(0.45s)
+  coord_b 이동 → 더블클릭(0.45s) → Q(0.45s)
+  coord_c 이동 → (싱글클릭(0.45s) → Q(0.45s)) × 4
 ```
 
 ### F7 전용 딜레이 설정키

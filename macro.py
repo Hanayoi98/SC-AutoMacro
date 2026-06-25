@@ -1259,7 +1259,7 @@ class Macro:
         if ca == [0, 0] or cb == [0, 0] or cc == [0, 0]:
             log.warning("F7 마우스 루틴: 좌표 A/B/C 미설정 (config.json 확인)")
 
-        _D = 0.4  # 클릭 간 고정 딜레이 (설정값과 무관)
+        _D = 0.45  # 클릭 간 고정 딜레이 (설정값과 무관)
 
         # 좌표 A
         self.inp_f7.move(*ca)
