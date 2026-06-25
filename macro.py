@@ -1526,7 +1526,7 @@ class Macro:
                 seal_clicked = True
                 break
             log.info("  [변환루트] seal_idle 대기 중... (%d/3)", attempt + 1)
-            time.sleep(step)
+            time.sleep(0.5)
 
         self.inp.move(*mc)
         self.inp.click()
@@ -1612,7 +1612,7 @@ class Macro:
                     time.sleep(step)
                     break
                 log.info("    seal_idle 대기... (%d/5)", attempt + 1)
-                time.sleep(step)
+                time.sleep(0.5)
             else:
                 log.warning("  [특수 변환] seal_idle 미감지 → 루프 종료")
                 return
