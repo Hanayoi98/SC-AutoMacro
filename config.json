@@ -1,0 +1,55 @@
+{
+  "f6_chat_macro_on": false,
+  "id_code": "985545",
+  "f6_pet_upgrade": "c, q10, w6, a10, s2, c, s5, c",
+  "f6_final_action": "w, s, r",
+  "f9_pet_interval": 200,
+  "f9_pet_upgrade": "e3",
+  "box28_confidence_set": 0.97,
+  "f9_box28_monitor_on": true,
+  "f9_early_branch_on": true,
+  "check_on_offset_x": 1324,
+  "check_on_offset_y": 1056,
+  "coord_a": [
+    615,
+    748
+  ],
+  "coord_b": [
+    630,
+    743
+  ],
+  "coord_c": [
+    997,
+    730
+  ],
+  "myth_text_coord": [
+    989,
+    625
+  ],
+  "search_confidence": 0.76,
+  "input_delay": 0.15,
+  "loop_delay": 0.3,
+  "mouse_move_dur": 0.05,
+  "region_game": [
+    370,
+    205,
+    840,
+    665
+  ],
+  "region_ui": [
+    0,
+    730,
+    1620,
+    520
+  ],
+  "check_on_offset": [
+    1324,
+    1056
+  ],
+  "step_delay": 0.25,
+  "key_speed_delay": 1.8,
+  "window_size": [
+    1630,
+    1250
+  ]
+}

@@ -1,0 +1,14 @@
+# 로그
+macro.log
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+
+# 설정 (개인 좌표 포함되므로 필요 시 제외)
+# config.json
+
+# 가상환경
+venv/
+.venv/
