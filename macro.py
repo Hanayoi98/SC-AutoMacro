@@ -183,7 +183,7 @@ DEFAULT_CONFIG: dict = {
     "coord_b":         [0, 0],
     "coord_c":         [0, 0],
     "myth_text_coord": [0, 0],
-    # ── 탐색 · 입력 튜닝 ──
+    # ── 탐색 · 입력 튜닝 (F9 루프) ──
     "search_confidence": 0.85,
     "input_delay":       0.5,
     "loop_delay":        0.5,
@@ -191,6 +191,10 @@ DEFAULT_CONFIG: dict = {
     "step_delay":        0.2,
     "key_speed_delay":   1.0,
     "window_size":       [0, 0],
+    # ── F7 전용 딜레이 ──
+    "f7_input_delay":    0.15,
+    "f7_step_delay":     0.2,
+    "f7_mouse_move_dur": 0.05,
 }
 
 
@@ -206,6 +210,9 @@ _NUM_KEYS = {
     "mouse_move_dur":      float,
     "step_delay":          float,
     "key_speed_delay":     float,
+    "f7_input_delay":      float,
+    "f7_step_delay":       float,
+    "f7_mouse_move_dur":   float,
 }
 
 def _coerce_types(cfg: dict) -> dict:
@@ -711,15 +718,23 @@ class SettingsWindow:
     # ── 탭 5: 고급 ───────────────────────────────
     def _tab_advanced(self, nb):
         f = self._frame(nb); nb.add(f, text=" 고급 ")
-        rows = [
-            ("이미지 매칭 정확도", "search_confidence", "num"),
-            ("키 입력 딜레이(초)", "input_delay",       "num"),
-            ("동작 간 딜레이(초)", "step_delay",        "num"),
-            ("열쇠 반영 대기(초)", "key_speed_delay",  "num"),
-            ("루프 딜레이(초)",    "loop_delay",        "num"),
-            ("마우스 이동 시간(초)","mouse_move_dur",   "num"),
+        self._lbl(f, "[ F9 루프 ]", bold=True, fg=self.C_ACC).pack(anchor="w", pady=(8,2), padx=10)
+        rows_f9 = [
+            ("키 입력 딜레이(초)", "input_delay",    "num"),
+            ("동작 간 딜레이(초)", "step_delay",     "num"),
+            ("루프 딜레이(초)",    "loop_delay",     "num"),
+            ("마우스 이동 시간(초)","mouse_move_dur","num"),
+            ("열쇠 반영 대기(초)", "key_speed_delay","num"),
+            ("이미지 매칭 정확도", "search_confidence","num"),
         ]
-        self._cfg_rows(f, rows)
+        self._cfg_rows(f, rows_f9)
+        self._lbl(f, "[ F7 autosetting ]", bold=True, fg=self.C_ACC).pack(anchor="w", pady=(10,2), padx=10)
+        rows_f7 = [
+            ("키 입력 딜레이(초)", "f7_input_delay",   "num"),
+            ("동작 간 딜레이(초)", "f7_step_delay",    "num"),
+            ("마우스 이동 시간(초)","f7_mouse_move_dur","num"),
+        ]
+        self._cfg_rows(f, rows_f7)
 
     # ── 공통: config 행 생성 ─────────────────────
     def _cfg_rows(self, parent, rows):
@@ -1067,8 +1082,12 @@ class Macro:
         self.cfg    = load_config()
         self.finder = Finder(self.cfg.get("search_confidence", 0.85))
         self.inp    = Input(
-            delay     = self.cfg.get("input_delay", 0.5 ),
-            mouse_dur = self.cfg.get("mouse_move_dur", 0.08),
+            delay     = self.cfg.get("input_delay", 0.5),
+            mouse_dur = self.cfg.get("mouse_move_dur", 0.5),
+        )
+        self.inp_f7 = Input(
+            delay     = self.cfg.get("f7_input_delay", 0.15),
+            mouse_dur = self.cfg.get("f7_mouse_move_dur", 0.05),
         )
         self._stop    = threading.Event()
         self._f9thr:  Optional[threading.Thread] = None
@@ -1081,10 +1100,12 @@ class Macro:
         with open(CONFIG_PATH, "w", encoding="utf-8") as f:
             json.dump(self.cfg, f, indent=2, ensure_ascii=False)
         # 저장 즉시 Input 객체에도 반영 (재시작 불필요)
-        self.inp.delay     = float(self.cfg.get("input_delay",    0.5))
-        self.inp.mouse_dur = float(self.cfg.get("mouse_move_dur", 0.5))
-        log.info("config.json 저장 완료 (input_delay=%.2f, mouse_dur=%.2f)",
-                 self.inp.delay, self.inp.mouse_dur)
+        self.inp.delay        = float(self.cfg.get("input_delay",      0.5))
+        self.inp.mouse_dur    = float(self.cfg.get("mouse_move_dur",   0.5))
+        self.inp_f7.delay     = float(self.cfg.get("f7_input_delay",   0.15))
+        self.inp_f7.mouse_dur = float(self.cfg.get("f7_mouse_move_dur",0.05))
+        log.info("config.json 저장 완료 (input_delay=%.2f, f7_input_delay=%.2f)",
+                 self.inp.delay, self.inp_f7.delay)
 
     # ── 창 크기 자동 조정 ────────────────
     def _auto_resize_window(self) -> None:
@@ -1203,18 +1224,19 @@ class Macro:
                 return
             log.info("key 발견: %s", pos)
 
-            self.inp.press("f2");  time.sleep(self.cfg.get("step_delay", 0.2))
-            self.inp.press("2");   time.sleep(self.cfg.get("step_delay", 0.2))
+            sd = self.cfg.get("f7_step_delay", 0.2)
+            self.inp_f7.press("f2");  time.sleep(sd)
+            self.inp_f7.press("2");   time.sleep(sd)
 
             # 초반 펫 업그레이드 문자열
-            self.inp.type_seq(self.cfg.get("f6_pet_upgrade", ""))
-            time.sleep(self.cfg.get("step_delay", 0.2))
+            self.inp_f7.type_seq(self.cfg.get("f6_pet_upgrade", ""))
+            time.sleep(sd)
 
-            self.inp.press("3");   time.sleep(self.cfg.get("step_delay", 0.2))
+            self.inp_f7.press("3");   time.sleep(sd)
 
             # 마무리 동작 문자열
-            self.inp.type_seq(self.cfg.get("f6_final_action", ""))
-            time.sleep(self.cfg.get("step_delay", 0.2))
+            self.inp_f7.type_seq(self.cfg.get("f6_final_action", ""))
+            time.sleep(sd)
 
             # 마우스 루틴
             self._f7_mouse_routine()
@@ -1238,20 +1260,20 @@ class Macro:
             log.warning("F7 마우스 루틴: 좌표 A/B/C 미설정 (config.json 확인)")
 
         # 좌표 A
-        self.inp.move(*ca)
-        self.inp.dclick()
-        self.inp.press("q")
+        self.inp_f7.move(*ca)
+        self.inp_f7.dclick()
+        self.inp_f7.press("q")
 
         # 좌표 B
-        self.inp.move(*cb)
-        self.inp.dclick()
-        self.inp.press("q")
+        self.inp_f7.move(*cb)
+        self.inp_f7.dclick()
+        self.inp_f7.press("q")
 
         # 좌표 C (싱글클릭 × 4)
-        self.inp.move(*cc)
+        self.inp_f7.move(*cc)
         for _ in range(4):
-            self.inp.click()
-            self.inp.press("q")
+            self.inp_f7.click()
+            self.inp_f7.press("q")
 
     # ─────────────────────────────────────
     # F8: @태초 전송

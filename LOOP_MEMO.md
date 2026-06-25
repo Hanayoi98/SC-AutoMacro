@@ -103,12 +103,19 @@ f9_early_branch_on=True → f7() 자동 실행
 ## F7 루틴
 ```
 key 이미지 대기 (무한, region_game)
-F2 → 2 → f6_pet_upgrade → 3 → f6_final_action
-_f7_mouse_routine():
-  coord_a 더블클릭 + Q
-  coord_b 더블클릭 + Q
-  coord_c 싱글클릭 + Q × 4
+F2 → 2 → f6_pet_upgrade → 3 → f6_final_action  (딜레이: f7_step_delay)
+_f7_mouse_routine():  (딜레이: inp_f7 = f7_input_delay / f7_mouse_move_dur)
+  coord_a 이동 → 더블클릭 → Q
+  coord_b 이동 → 더블클릭 → Q
+  coord_c 이동 → (싱글클릭 → Q) × 4
 ```
+
+### F7 전용 딜레이 설정키
+| 키 | 기본값 | 적용 대상 |
+|---|---|---|
+| `f7_input_delay` | 0.15s | 키/클릭 후 대기 |
+| `f7_step_delay` | 0.2s | 동작 간 대기 |
+| `f7_mouse_move_dur` | 0.05s | 마우스 이동 시간 |
 
 ## F8 루틴
 ```
@@ -124,4 +131,4 @@ ENTER → @태초 → ENTER
 
 ---
 
-_최종 업데이트: 2026-06-25_
+_최종 업데이트: 2026-06-25 — F7 딜레이 분리 (f7_input_delay / f7_step_delay / f7_mouse_move_dur)_
