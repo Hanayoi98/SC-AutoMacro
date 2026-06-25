@@ -22,8 +22,9 @@
      False → 계속
 
 ③ 28box 확인 (b28_conf=0.97, region_ui)
-     감지 + on 있음 → key_skip=True → loop_delay → Loop Start
-     감지 + on 없음 → _handle_28box() → key_skip=True → loop_delay → Loop Start
+     26box 감지 → 오인식 방지, ④로 패스 (열쇠루틴 진행)
+     28box 감지 + on 있음 → key_skip=True → loop_delay → Loop Start
+     28box 감지 + on 없음 → _handle_28box() → key_skip=True → loop_delay → Loop Start
      미감지 → ④
 
 ④ seal_idle 확인 (region_game)
@@ -149,4 +150,4 @@ ENTER → @태초 → ENTER
 | `box28_confidence_set` | 28box |
 | `count_confidence` | count_1 / count_2 / count_3 |
 
-_최종 업데이트: 2026-06-26 — 고급창 고급1/고급2 분리, count_confidence 추가_
+_최종 업데이트: 2026-06-26 — 26box 오인식 방지 (26box 감지 시 28box 처리 건너뜀)_

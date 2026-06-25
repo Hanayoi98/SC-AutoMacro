@@ -1359,22 +1359,26 @@ class Macro:
                     self._conversion_route(tcx, tcy, conf, gr, ur, b28_conf, key_skip=True)
                     continue
 
-                # ③ 28box 확인
-                p28 = self.finder.find_in(screen, "28box", b28_conf, ur)
-                if p28:
-                    on_p = self.finder.find_in(screen, "on", 0.85, ur)
-                    if on_p:
-                        log.info("  [③] 28box + ON 확인 → key_skip = True")
-                        key_skip = True
-                        time.sleep(self.cfg.get("loop_delay", 0.5))
-                        continue
-                    else:
-                        log.info("  [③] 28box + OFF → ON 전환 처리")
-                        self._handle_28box(ur)
-                        key_skip = True
-                        log.info("  [스킵 모드 ON] F9 재시작 전까지 유지")
-                        time.sleep(self.cfg.get("loop_delay", 0.5))
-                        continue
+                # ③ 28box 확인 (26box 감지 시 오인식 방지 → 열쇠루틴으로 패스)
+                p26 = self.finder.find_in(screen, "26box", b28_conf, ur)
+                if p26:
+                    log.info("  [③] 26box 감지 → 28box 제외, 열쇠루틴 진행")
+                else:
+                    p28 = self.finder.find_in(screen, "28box", b28_conf, ur)
+                    if p28:
+                        on_p = self.finder.find_in(screen, "on", 0.85, ur)
+                        if on_p:
+                            log.info("  [③] 28box + ON 확인 → key_skip = True")
+                            key_skip = True
+                            time.sleep(self.cfg.get("loop_delay", 0.5))
+                            continue
+                        else:
+                            log.info("  [③] 28box + OFF → ON 전환 처리")
+                            self._handle_28box(ur)
+                            key_skip = True
+                            log.info("  [스킵 모드 ON] F9 재시작 전까지 유지")
+                            time.sleep(self.cfg.get("loop_delay", 0.5))
+                            continue
 
                 # ④ seal_idle 확인 (region_game)
                 seal = self.finder.find_in(screen, "seal_idle", conf, gr)
