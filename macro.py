@@ -1286,9 +1286,9 @@ class Macro:
             return
         log.info("═══ F8 ═══")
         try:
-            self.inp.press("enter")
+            self.inp.press("enter", d=0.1)
             self.inp.paste_text("@태초")
-            self.inp.press("enter")
+            self.inp.press("enter", d=0.1)
         except Exception as e:
             log.error("F8 오류: %s", e, exc_info=True)
 
