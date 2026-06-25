@@ -74,7 +74,7 @@ seal_idle 클릭 → target 우클릭 → Loop Start
 bou 탐색
   없음 → _normal_conversion()
   있음 → bou 우측 130px 영역에서 count_1/2/3 탐색
-    count 있음(1~3) → _normal_conversion()
+    count 있음(1~3) → Loop Start 복귀 (rclick 없음, 오브젝트 이동 방지)
     count 없음(4+)  → _do_special_conversion()
 ```
 

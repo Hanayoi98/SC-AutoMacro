@@ -1597,8 +1597,8 @@ class Macro:
                 break
 
         if count_found:
-            log.info("  count 1~3 확인 → 특수 변환 불가 → 일반 변환")
-            self._normal_conversion(tcx, tcy, conf)
+            log.info("  count 1~3 확인 → 특수 변환 불가 → Loop Start 복귀 (rclick 생략)")
+            return
         else:
             log.info("  count 4+ 확인 → 특수 변환 수행")
             self._do_special_conversion(tcx, tcy, conf, b28_conf, gr, ur, key_skip)
