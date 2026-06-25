@@ -81,13 +81,13 @@ bou 탐색
 ### _do_special_conversion
 ```
 [루프]
-  A키 입력 → loop_delay 대기
-  seal_idle 클릭 (있을 때)
+  seal_idle 폴링 (최대 5회 × step_delay) → 클릭
+    미감지 시 루프 종료
   myth_text_coord 클릭
   bou 탐색:
     없음          → _normal_conversion() → return
     있음 + count 1~3 → _normal_conversion() → return
-    있음 + count 4+  → 루프 반복
+    있음 + count 4+  → A키 입력 → loop_delay → 루프 반복
 ```
 
 ### _pet_upgrade_check
@@ -153,4 +153,4 @@ ENTER → @태초 → ENTER
 | `box28_confidence_set` | 28box |
 | `count_confidence` | count_1 / count_2 / count_3 |
 
-_최종 업데이트: 2026-06-26 — 26box 오인식 방지 (26box 감지 시 28box 처리 건너뜀)_
+_최종 업데이트: 2026-06-26 — 변환루트 seal_idle 폴링 추가 / 특수변환 루프 순서 재구성 (seal→myth→bou→A키)_

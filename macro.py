@@ -1508,19 +1508,29 @@ class Macro:
         if mc == [0, 0]:
             log.warning("  myth_text_coord 미설정 (config.json 확인)")
 
-        # speed 미감지 시에만 seal_idle 클릭 (speed 있으면 이미 클릭된 상태)
-        scr = self.finder.grab_screen()
-        speed_now = self.finder.find_any_in(scr, ["speed2", "speed3"], conf, ur)
-        if not speed_now:
+        step = self.cfg.get("step_delay", 0.2)
+
+        # seal_idle 폴링 (최대 3회) — ④에서 클릭 직후 active 상태일 수 있으므로 대기 후 재시도
+        seal_clicked = False
+        for attempt in range(3):
+            scr = self.finder.grab_screen()
+            speed_now = self.finder.find_any_in(scr, ["speed2", "speed3"], conf, ur)
+            if speed_now:
+                log.info("  [변환루트] speed 감지 → seal 클릭 생략")
+                break
             seal = self.finder.find_in(scr, "seal_idle", conf, gr)
             if seal:
-                log.info("  [변환루트] speed 없음 → seal_idle 클릭")
+                log.info("  [변환루트] seal_idle 클릭 (시도 %d)", attempt + 1)
                 self.inp.click(*seal)
-                time.sleep(self.cfg.get("step_delay", 0.2))
+                time.sleep(step)
+                seal_clicked = True
+                break
+            log.info("  [변환루트] seal_idle 대기 중... (%d/3)", attempt + 1)
+            time.sleep(step)
 
         self.inp.move(*mc)
         self.inp.click()
-        time.sleep(self.cfg.get("step_delay", 0.2))
+        time.sleep(step)
 
         myth = self.finder.find("myth_text", conf, ur)
         if not myth:
@@ -1588,39 +1598,42 @@ class Macro:
               있음 + count 없음(4+) → 루프 반복
         """
         log.info("  [특수 변환] 루프 시작")
-        mc = self._abs_coord("myth_text_coord")
+        mc   = self._abs_coord("myth_text_coord")
+        step = self.cfg.get("step_delay", 0.1)
 
         while not self._stop.is_set():
-            # A 키
-            self.inp.press("a")
-            log.info("    A 입력")
-            time.sleep(self.cfg.get("loop_delay", 0.5))
-
-            # seal_idle 클릭
-            scr = self.finder.grab_screen()
-            seal = self.finder.find_in(scr, "seal_idle", conf, gr)
-            if seal:
-                self.inp.click(*seal)
-                log.info("    seal_idle 클릭")
-                time.sleep(self.cfg.get("step_delay", 0.1))
+            # seal_idle 폴링 (최대 5회) — A키 후 애니메이션 종료 대기
+            for attempt in range(5):
+                scr  = self.finder.grab_screen()
+                seal = self.finder.find_in(scr, "seal_idle", conf, gr)
+                if seal:
+                    self.inp.click(*seal)
+                    log.info("    seal_idle 클릭 (시도 %d)", attempt + 1)
+                    time.sleep(step)
+                    break
+                log.info("    seal_idle 대기... (%d/5)", attempt + 1)
+                time.sleep(step)
+            else:
+                log.warning("  [특수 변환] seal_idle 미감지 → 루프 종료")
+                return
 
             # myth_text_coord 클릭
             self.inp.move(*mc)
             self.inp.click()
-            time.sleep(self.cfg.get("step_delay", 0.1))
+            time.sleep(step)
 
             # bou 탐색
             scr = self.finder.grab_screen()
-            bp = self.finder.find("bou", conf, ur)
+            bp  = self.finder.find_in(scr, "bou", conf, ur)
             if not bp:
                 log.info("  [특수 변환] bou 없음 → 일반 변환")
                 self._normal_conversion(tcx, tcy, conf, gr)
                 return
 
             bx, by = bp
-            cnt_conf = self.cfg.get("count_confidence", conf)
+            cnt_conf    = self.cfg.get("count_confidence", conf)
             count_found = any(
-                self.finder.find(f"count_{i}", cnt_conf, (bx + 5, by - 20, 130, 50))
+                self.finder.find_in(scr, f"count_{i}", cnt_conf, (bx + 5, by - 20, 130, 50))
                 for i in range(1, 4)
             )
             if count_found:
@@ -1628,7 +1641,10 @@ class Macro:
                 self._normal_conversion(tcx, tcy, conf, gr)
                 return
 
-            log.info("  [특수 변환] count 4+ 유지 → 루프 반복")
+            log.info("  [특수 변환] count 4+ 유지 → A키 입력")
+            # A 키
+            self.inp.press("a")
+            time.sleep(self.cfg.get("loop_delay", 0.5))
 
         log.info("  [특수 변환] 중단 → Loop Start")
 
