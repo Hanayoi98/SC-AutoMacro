@@ -1510,23 +1510,15 @@ class Macro:
 
         step = self.cfg.get("step_delay", 0.2)
 
-        # seal_idle 폴링 (최대 3회) — ④에서 클릭 직후 active 상태일 수 있으므로 대기 후 재시도
-        seal_clicked = False
-        for attempt in range(3):
-            scr = self.finder.grab_screen()
-            speed_now = self.finder.find_any_in(scr, ["speed2", "speed3"], conf, ur)
-            if speed_now:
-                log.info("  [변환루트] speed 감지 → seal 클릭 생략")
-                break
+        # ④에서 seal_idle 이미 클릭됨 → 재클릭 불필요, 즉시 myth_text_coord 진행
+        # key_skip=True(② 경로)일 때만 seal_idle 1회 탐색 후 클릭
+        if key_skip:
+            scr  = self.finder.grab_screen()
             seal = self.finder.find_in(scr, "seal_idle", conf, gr)
             if seal:
-                log.info("  [변환루트] seal_idle 클릭 (시도 %d)", attempt + 1)
+                log.info("  [변환루트] seal_idle 클릭 (②경로)")
                 self.inp.click(*seal)
                 time.sleep(step)
-                seal_clicked = True
-                break
-            log.info("  [변환루트] seal_idle 대기 중... (%d/3)", attempt + 1)
-            time.sleep(0.5)
 
         self.inp.move(*mc)
         self.inp.click()
