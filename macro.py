@@ -1587,6 +1587,11 @@ class Macro:
         - 8초 완료 후: Loop Start로 복귀
         """
         log.info("  [특수 변환] 시작 (8초, A키 0.5s 간격, key_skip=%s)", key_skip)
+        # myth_text_coord 클릭 후 마우스가 우측 가장자리에 남으면 화면 스크롤 발생
+        # → target_circle 좌표로 복귀하여 안전 위치 확보
+        if tcx and tcy:
+            self.inp.move(tcx, tcy)
+            log.info("    [특수 변환] 마우스 → target(%d,%d)", tcx, tcy)
         t_start      = time.time()
         t_last_check = time.time()
 
