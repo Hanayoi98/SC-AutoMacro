@@ -1259,21 +1259,23 @@ class Macro:
         if ca == [0, 0] or cb == [0, 0] or cc == [0, 0]:
             log.warning("F7 마우스 루틴: 좌표 A/B/C 미설정 (config.json 확인)")
 
+        _D = 0.4  # 클릭 간 고정 딜레이 (설정값과 무관)
+
         # 좌표 A
         self.inp_f7.move(*ca)
-        self.inp_f7.dclick()
-        self.inp_f7.press("q")
+        self.inp_f7.dclick(d=_D)
+        self.inp_f7.press("q", d=_D)
 
         # 좌표 B
         self.inp_f7.move(*cb)
-        self.inp_f7.dclick()
-        self.inp_f7.press("q")
+        self.inp_f7.dclick(d=_D)
+        self.inp_f7.press("q", d=_D)
 
         # 좌표 C (싱글클릭 × 4)
         self.inp_f7.move(*cc)
         for _ in range(4):
-            self.inp_f7.click()
-            self.inp_f7.press("q")
+            self.inp_f7.click(d=_D)
+            self.inp_f7.press("q", d=_D)
 
     # ─────────────────────────────────────
     # F8: @태초 전송
