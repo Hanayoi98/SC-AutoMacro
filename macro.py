@@ -185,6 +185,7 @@ DEFAULT_CONFIG: dict = {
     "myth_text_coord": [0, 0],
     # ── 탐색 · 입력 튜닝 (F9 루프) ──
     "search_confidence": 0.85,
+    "count_confidence":  0.85,
     "input_delay":       0.5,
     "loop_delay":        0.5,
     "mouse_move_dur":    0.5,
@@ -205,6 +206,7 @@ _NUM_KEYS = {
     "check_on_offset_x":   int,
     "check_on_offset_y":   int,
     "search_confidence":   float,
+    "count_confidence":    float,
     "input_delay":         float,
     "loop_delay":          float,
     "mouse_move_dur":      float,
@@ -642,7 +644,8 @@ class SettingsWindow:
         self._tab_coords(nb)
         self._tab_f6(nb)
         self._tab_f9(nb)
-        self._tab_advanced(nb)
+        self._tab_advanced1(nb)
+        self._tab_advanced2(nb)
 
         # 저장 버튼
         self._btn(self.win, "  저장  ", self._save,
@@ -707,34 +710,42 @@ class SettingsWindow:
     def _tab_f9(self, nb):
         f = self._frame(nb); nb.add(f, text=" F9 설정 ")
         rows = [
-            ("펫 업그레이드 키",    "f9_pet_upgrade",       "str"),
-            ("펫 업그레이드 주기(초)","f9_pet_interval",    "num"),
-            ("28box 감시",          "f9_box28_monitor_on",  "bool"),
-            ("28box 정확도 (0~1)",  "box28_confidence_set", "num"),
-
+            ("펫 업그레이드 키",    "f9_pet_upgrade",      "str"),
+            ("펫 업그레이드 주기(초)","f9_pet_interval",   "num"),
+            ("28box 감시",          "f9_box28_monitor_on", "bool"),
         ]
         self._cfg_rows(f, rows)
 
-    # ── 탭 5: 고급 ───────────────────────────────
-    def _tab_advanced(self, nb):
-        f = self._frame(nb); nb.add(f, text=" 고급 ")
+    # ── 탭 5: 고급1 (딜레이) ─────────────────────
+    def _tab_advanced1(self, nb):
+        f = self._frame(nb); nb.add(f, text=" 고급1 ")
         self._lbl(f, "[ F9 루프 ]", bold=True, fg=self.C_ACC).pack(anchor="w", pady=(8,2), padx=10)
         rows_f9 = [
-            ("키 입력 딜레이(초)", "input_delay",    "num"),
-            ("동작 간 딜레이(초)", "step_delay",     "num"),
-            ("루프 딜레이(초)",    "loop_delay",     "num"),
-            ("마우스 이동 시간(초)","mouse_move_dur","num"),
-            ("열쇠 반영 대기(초)", "key_speed_delay","num"),
-            ("이미지 매칭 정확도", "search_confidence","num"),
+            ("키 입력 딜레이(초)",  "input_delay",    "num"),
+            ("동작 간 딜레이(초)",  "step_delay",     "num"),
+            ("루프 딜레이(초)",     "loop_delay",     "num"),
+            ("마우스 이동 시간(초)","mouse_move_dur", "num"),
+            ("열쇠 반영 대기(초)",  "key_speed_delay","num"),
         ]
         self._cfg_rows(f, rows_f9)
         self._lbl(f, "[ F7 autosetting ]", bold=True, fg=self.C_ACC).pack(anchor="w", pady=(10,2), padx=10)
         rows_f7 = [
-            ("키 입력 딜레이(초)", "f7_input_delay",   "num"),
-            ("동작 간 딜레이(초)", "f7_step_delay",    "num"),
+            ("키 입력 딜레이(초)",  "f7_input_delay",   "num"),
+            ("동작 간 딜레이(초)",  "f7_step_delay",    "num"),
             ("마우스 이동 시간(초)","f7_mouse_move_dur","num"),
         ]
         self._cfg_rows(f, rows_f7)
+
+    # ── 탭 6: 고급2 (이미지 매칭 정확도) ─────────
+    def _tab_advanced2(self, nb):
+        f = self._frame(nb); nb.add(f, text=" 고급2 ")
+        self._lbl(f, "[ 이미지 매칭 정확도 ]", bold=True, fg=self.C_ACC).pack(anchor="w", pady=(8,2), padx=10)
+        rows = [
+            ("그 외 나머지 (0~1)", "search_confidence",   "num"),
+            ("box 정확도 (0~1)",   "box28_confidence_set","num"),
+            ("count 정확도 (0~1)", "count_confidence",    "num"),
+        ]
+        self._cfg_rows(f, rows)
 
     # ── 공통: config 행 생성 ─────────────────────
     def _cfg_rows(self, parent, rows):
@@ -1365,28 +1376,29 @@ class Macro:
                         time.sleep(self.cfg.get("loop_delay", 0.5))
                         continue
 
-                # ④ seal_idle 확인 (28box 미감지 시)
+                # ④ seal_idle 확인 (region_game)
                 seal = self.finder.find_in(screen, "seal_idle", conf, gr)
                 if not seal:
-                    log.info("  [④] seal_idle 미감지 → 대기 후 Loop Start")
-                    time.sleep(self.cfg.get("loop_delay", 0.3))
+                    log.info("  [④] seal_idle 미감지 → Loop Start")
+                    time.sleep(self.cfg.get("loop_delay", 0.5))
                     continue
                 log.info("  [④] seal_idle 감지 → 클릭")
                 self.inp.click(*seal)
                 if self._stop.is_set():
                     break
 
-                # speed 확인
+                # loop_delay 후 재캡처
+                time.sleep(self.cfg.get("loop_delay", 0.5))
+                screen = self.finder.grab_screen()
+
+                # speed2/3 확인
                 speed = self.finder.find_any_in(screen, ["speed2", "speed3"], conf, ur)
                 if speed:
                     log.info("  speed %s 감지 → 열쇠루틴", speed[0])
                     self._key_routine(tcx, tcy, conf, b28_conf, gr, ur)
                 else:
-                    # ⑤ 변환루트
                     log.info("  speed 미감지 → ⑤ 변환루트")
                     self._conversion_route(tcx, tcy, conf, gr, ur, b28_conf)
-
-                time.sleep(self.cfg.get("loop_delay", 0.5))
 
             except Exception as e:
                 log.error("F9 루프 오류: %s", e, exc_info=True)
@@ -1544,8 +1556,9 @@ class Macro:
         bx, by = bp
         count_region = (bx + 5, by - 20, 130, 50)
 
+        cnt_conf = self.cfg.get("count_confidence", conf)
         count_found = any(
-            self.finder.find(f"count_{i}", conf, count_region)
+            self.finder.find(f"count_{i}", cnt_conf, count_region)
             for i in range(1, 4)   # count_1, count_2, count_3
         )
 

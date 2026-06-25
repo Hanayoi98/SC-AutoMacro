@@ -29,6 +29,7 @@
 ④ seal_idle 확인 (region_game)
      없음 → loop_delay → Loop Start
      있음 → 클릭
+     loop_delay 대기 후 화면 재캡처 (grab_screen)
      speed2/3 확인:
        있음 → _key_routine() → Loop Start
        없음 → ⑤ 변환루트
@@ -131,4 +132,21 @@ ENTER → @태초 → ENTER
 
 ---
 
-_최종 업데이트: 2026-06-25 — F7 딜레이 분리 (f7_input_delay / f7_step_delay / f7_mouse_move_dur)_
+## 설정창 탭 구성
+| 탭 | 내용 |
+|---|---|
+| 창 크기 | SC 창 해상도 |
+| 좌표 설정 | A/B/C/M/ON 좌표 |
+| F6 설정 | 채팅·식별코드·분기 |
+| F9 설정 | 펫·28box 감시 |
+| 고급1 | F9/F7 딜레이 |
+| 고급2 | 이미지 매칭 정확도 (나머지/box/count) |
+
+### 이미지 매칭 정확도 키
+| 키 | 적용 대상 |
+|---|---|
+| `search_confidence` | target_circle, seal_idle, speed2/3, key, myth_text, bou 등 나머지 |
+| `box28_confidence_set` | 28box |
+| `count_confidence` | count_1 / count_2 / count_3 |
+
+_최종 업데이트: 2026-06-26 — 고급창 고급1/고급2 분리, count_confidence 추가_

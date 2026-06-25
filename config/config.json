@@ -1,11 +1,11 @@
 {
   "f6_chat_macro_on": false,
   "id_code": "985545",
-  "f6_pet_upgrade": "c, q10, w6, a10, s2, c, s6, d, c",
+  "f6_pet_upgrade": "c, q10, w6, a10, s2, c, s7, d, c",
   "f6_final_action": "w, s, r",
   "f9_pet_interval": 200,
   "f9_pet_upgrade": "e3",
-  "box28_confidence_set": 0.97,
+  "box28_confidence_set": 0.94,
   "f9_box28_monitor_on": true,
   "f9_early_branch_on": true,
   "check_on_offset_x": 1324,
@@ -26,7 +26,7 @@
     989,
     625
   ],
-  "search_confidence": 0.76,
+  "search_confidence": 0.72,
   "input_delay": 0.2,
   "loop_delay": 0.5,
   "mouse_move_dur": 0.01,
@@ -54,5 +54,6 @@
   ],
   "f7_input_delay": 0.2,
   "f7_step_delay": 0.3,
-  "f7_mouse_move_dur": 0.01
+  "f7_mouse_move_dur": 0.01,
+  "count_confidence": 0.85
 }
