@@ -467,6 +467,20 @@ class Finder:
             return (maxloc[0] + w // 2 + ox, maxloc[1] + h // 2 + oy)
         return None
 
+    def find_score(
+        self,
+        name: str,
+        region: Optional[Tuple] = None,
+    ) -> float:
+        """이미지 최대 매칭 스코어만 반환 (임계값 무관)."""
+        tmpl = self._load(name)
+        if tmpl is None:
+            return 0.0
+        scr    = self._grab(region)
+        result = cv2.matchTemplate(scr, tmpl, cv2.TM_CCOEFF_NORMED)
+        _, maxv, _, _ = cv2.minMaxLoc(result)
+        return float(maxv)
+
     def find_any(
         self,
         names: List[str],
@@ -1570,12 +1584,17 @@ class Macro:
 
         bx, by = bp
         count_region = (bx + 5, by - 20, 130, 50)
+        log.info("  bou @ (%d,%d)  count_region=%s", bx, by, count_region)
 
         cnt_conf = self.cfg.get("count_confidence", conf)
-        count_found = any(
-            self.finder.find(f"count_{i}", cnt_conf, count_region)
-            for i in range(1, 4)   # count_1, count_2, count_3
-        )
+        count_found = False
+        for i in range(1, 4):
+            score = self.finder.find_score(f"count_{i}", count_region)
+            hit   = score >= cnt_conf
+            log.info("  count_%d score=%.3f (conf=%.2f) → %s", i, score, cnt_conf, "HIT" if hit else "miss")
+            if hit:
+                count_found = True
+                break
 
         if count_found:
             log.info("  count 1~3 확인 → 특수 변환 불가 → 일반 변환")
