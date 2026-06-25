@@ -80,11 +80,14 @@ bou 탐색
 
 ### _do_special_conversion
 ```
-8초 동안 A키 0.5s 간격 입력
-2초마다 (key_skip=False 시):
-  seal_idle 클릭 → speed 확인
-    speed 감지 → _key_routine() → return
-8초 완료 → Loop Start
+[루프]
+  A키 입력 → loop_delay 대기
+  seal_idle 클릭 (있을 때)
+  myth_text_coord 클릭
+  bou 탐색:
+    없음          → _normal_conversion() → return
+    있음 + count 1~3 → _normal_conversion() → return
+    있음 + count 4+  → 루프 반복
 ```
 
 ### _pet_upgrade_check

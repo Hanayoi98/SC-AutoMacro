@@ -1579,52 +1579,58 @@ class Macro:
                                ur: Optional[Tuple] = None,
                                key_skip: bool = False) -> None:
         """
-        특수 변환:
-        - A키를 0.5초 간격으로 8초 동안 입력
-        - 2초마다 (key_skip=False 일 때만): seal_idle 클릭 → speed2/3 확인
-          → speed 감지 시: 열쇠 루틴 전환
-          → 미감지: 계속 A 입력
-        - 8초 완료 후: Loop Start로 복귀
+        특수 변환 루프:
+          A키 입력 → 0.5s 대기
+          → seal_idle 클릭 → myth_text_coord 클릭
+          → bou 탐색:
+              없음          → _normal_conversion() → return
+              있음 + count 1~3 → _normal_conversion() → return
+              있음 + count 없음(4+) → 루프 반복
         """
-        log.info("  [특수 변환] 시작 (8초, A키 0.5s 간격, key_skip=%s)", key_skip)
-        # myth_text_coord 클릭 후 마우스가 우측 가장자리에 남으면 화면 스크롤 발생
-        # → target_circle 좌표로 복귀하여 안전 위치 확보
-        if tcx and tcy:
-            self.inp.move(tcx, tcy)
-            log.info("    [특수 변환] 마우스 → target(%d,%d)", tcx, tcy)
-        t_start      = time.time()
-        t_last_check = time.time()
+        log.info("  [특수 변환] 루프 시작")
+        mc = self._abs_coord("myth_text_coord")
 
         while not self._stop.is_set():
-            elapsed = time.time() - t_start
-            if elapsed >= 8.0:
-                break
-
-            # A 키 입력
+            # A 키
             self.inp.press("a")
-            log.info("    A 입력 @ %.1fs", elapsed)
+            log.info("    A 입력")
+            time.sleep(self.cfg.get("loop_delay", 0.5))
 
-            # 2초마다 seal+speed 체크 (key_skip=False 일 때만)
-            if not key_skip and time.time() - t_last_check >= 2.0:
-                t_last_check = time.time()
-                scr = self.finder.grab_screen()
+            # seal_idle 클릭
+            scr = self.finder.grab_screen()
+            seal = self.finder.find_in(scr, "seal_idle", conf, gr)
+            if seal:
+                self.inp.click(*seal)
+                log.info("    seal_idle 클릭")
+                time.sleep(self.cfg.get("step_delay", 0.1))
 
-                seal = self.finder.find_in(scr, "seal_idle", conf, gr)
-                if seal:
-                    self.inp.click(*seal)
-                    log.info("    seal_idle 클릭")
-                    time.sleep(self.cfg.get("step_delay", 0.1))
-                    scr = self.finder.grab_screen()
+            # myth_text_coord 클릭
+            self.inp.move(*mc)
+            self.inp.click()
+            time.sleep(self.cfg.get("step_delay", 0.1))
 
-                speed = self.finder.find_any_in(scr, ["speed2", "speed3"], conf, ur)
-                if speed:
-                    log.info("  [특수 변환] speed 감지 → 열쇠 루틴 전환")
-                    self._key_routine(tcx, tcy, conf, b28_conf, gr, ur)
-                    return
+            # bou 탐색
+            scr = self.finder.grab_screen()
+            bp = self.finder.find("bou", conf, ur)
+            if not bp:
+                log.info("  [특수 변환] bou 없음 → 일반 변환")
+                self._normal_conversion(tcx, tcy, conf, gr)
+                return
 
-            time.sleep(0.5)
+            bx, by = bp
+            cnt_conf = self.cfg.get("count_confidence", conf)
+            count_found = any(
+                self.finder.find(f"count_{i}", cnt_conf, (bx + 5, by - 20, 130, 50))
+                for i in range(1, 4)
+            )
+            if count_found:
+                log.info("  [특수 변환] count 1~3 감지 → 일반 변환")
+                self._normal_conversion(tcx, tcy, conf, gr)
+                return
 
-        log.info("  [특수 변환] 8초 완료 → Loop Start")
+            log.info("  [특수 변환] count 4+ 유지 → 루프 반복")
+
+        log.info("  [특수 변환] 중단 → Loop Start")
 
     # ─────────────────────────────────────
     # 시작
