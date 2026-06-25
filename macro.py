@@ -156,7 +156,7 @@ log.addHandler(_qh)
 # ──────────────────────────────────────────────────────────
 # 설정
 # ──────────────────────────────────────────────────────────
-CONFIG_PATH = os.path.join(_BASE_DIR, "config.json")
+CONFIG_PATH = os.path.join(_BASE_DIR, "config", "config.json")
 IMAGES_DIR  = os.path.join(_BASE_DIR, "images")
 SC_TITLES = [
     "starcraft",      # StarCraft, StarCraft: Remastered, StarCraft: Brood War
