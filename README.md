@@ -7,18 +7,23 @@
 ## 파일 구조
 
 ```
-sc_macro/
+SC_AutoMacro/
 ├── macro.py          ← 메인 스크립트
 ├── requirements.txt  ← 의존성
 ├── config.json       ← 설정값
+├── coord_finder.py   ← 좌표 캡처 도구
+├── region_check.py   ← 탐색 구역 시각화 도구
+├── 실행.bat          ← 실행 스크립트
 └── images/           ← 이미지 파일 보관 디렉터리
-    ├── autosetting.png
     ├── target_circle.png
     ├── target_circle2.png
     ├── seal_idle.png
     ├── speed2.png
     ├── speed3.png
     ├── key.png
+    ├── 25box.png
+    ├── 26box.png
+    ├── 27box.png
     ├── 28box.png
     ├── on.png
     ├── myth_text.png
@@ -44,12 +49,11 @@ pip install -r requirements.txt
 
 | 파일명 | 용도 |
 |---|---|
-| `autosetting.png` | F7 대기 트리거 |
 | `target_circle.png` / `target_circle2.png` | F9 루프 기준 오브젝트 |
 | `seal_idle.png` | seal 확인 클릭 대상 |
 | `speed2.png` / `speed3.png` | 속도 상태 판별 |
-| `key.png` | 열쇠 아이템 인식 |
-| `28box.png` | 상자 28번 상태 |
+| `key.png` | F7 대기 트리거 / 열쇠 아이템 인식 |
+| `25box.png` / `26box.png` / `27box.png` / `28box.png` | 상자 번호 상태 판별 |
 | `on.png` | ON/OFF 상태 확인 |
 | `myth_text.png` | 신화 텍스트 판별 |
 | `bou.png` | bou 위젯 인식 |
