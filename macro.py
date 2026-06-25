@@ -1510,15 +1510,24 @@ class Macro:
 
         step = self.cfg.get("step_delay", 0.2)
 
-        # ④에서 seal_idle 이미 클릭됨 → 재클릭 불필요, 즉시 myth_text_coord 진행
-        # key_skip=True(② 경로)일 때만 seal_idle 1회 탐색 후 클릭
+        # ④ 경로: seal_idle 이미 클릭됨 → 즉시 myth_text_coord 진행
+        # ② 경로(key_skip=True): 이전 변환 완료 후 seal_idle idle 복귀 대기 후 클릭
         if key_skip:
-            scr  = self.finder.grab_screen()
-            seal = self.finder.find_in(scr, "seal_idle", conf, gr)
-            if seal:
-                log.info("  [변환루트] seal_idle 클릭 (②경로)")
-                self.inp.click(*seal)
-                time.sleep(step)
+            seal_found = False
+            for attempt in range(5):
+                scr  = self.finder.grab_screen()
+                seal = self.finder.find_in(scr, "seal_idle", conf, gr)
+                if seal:
+                    log.info("  [변환루트] seal_idle 클릭 (②경로, 시도 %d)", attempt + 1)
+                    self.inp.click(*seal)
+                    time.sleep(step)
+                    seal_found = True
+                    break
+                log.info("  [변환루트] seal_idle 대기... (%d/5)", attempt + 1)
+                time.sleep(0.5)
+            if not seal_found:
+                log.warning("  [변환루트] seal_idle 미감지 → 사이클 스킵")
+                return
 
         self.inp.move(*mc)
         self.inp.click()
