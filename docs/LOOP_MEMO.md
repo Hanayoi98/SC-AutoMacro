@@ -8,89 +8,75 @@
 
 ```
 [Loop Start]
-  F2 입력 (+step_delay)
-  펫 업그레이드 주기 확인 (_pet_upgrade_check)
-  region_game / region_ui 갱신
-  화면 1회 캡처 (grab_screen)
+  게임 창(hwnd) 탐색 → 없으면 sleep(1) → continue
+  gx, gy, gw, gh 갱신
+  _pet_upgrade_check()
 
-① target_circle / target_circle2 탐색 (region_game, conf=search_confidence)
-     없음 → loop_delay → Loop Start
-     있음 → tcx, tcy 저장
+  탐색 영역 계산:
+    box_reg   = gx+gw*0.10, gy+gh*0.60, gw*0.40, gh*0.20
+    info_reg  = gx+gw*0.25, gy+gh*0.75, gw*0.45, gh*0.23
+    cmd_reg   = gx+gw*0.65, gy+gh*0.65, gw*0.35, gh*0.35
+    field_reg = gx+50, gy+50, gw-100, gh-250
+    full_reg  = gx, gy, gw, gh
 
-② key_skip 플래그 확인
-     True  → loop_delay → ⑤ 변환루트 (key_skip=True)
-     False → 계속
+① [28box 자동판매 설정] (f9_box28_monitor_on=True, is_auto_sell_set=False 일 때만)
+     28box 미감지 → 패스
+     28box 감지 →
+       '3' 키 입력 → sleep(0.5)
+       check_on_offset 위치로 마우스 이동 → sleep(0.4)
+       ON 감지 시: 설정 완료 로그
+       ON 미감지 시: A키 입력
+       is_auto_sell_set = True → sleep(0.5) → continue
 
-③ 28box 확인 (b28_conf=box28_confidence_set, region_ui)
-     26box 감지 → 오인식 방지, ④로 패스 (열쇠루틴 진행)
-     28box 감지 + on 있음 → key_skip=True → loop_delay → Loop Start
-     28box 감지 + on 없음 → _handle_28box() → key_skip=True → loop_delay → Loop Start
-     미감지 → ④
+② seal_idle (SEAL_CONF=0.75, field_reg) + target_circle (TARGET_CONF=0.65, full_reg) 탐색
+     target_circle 없으면 target_circle2 탐색
+     둘 중 하나라도 없으면 → sleep(0.12) → continue
+     sx, sy = seal 중심 / tx, ty = target 중심
 
-④ seal_idle 확인 (region_game, conf=search_confidence)
-     없음 → loop_delay → Loop Start
-     있음 → 클릭
-     loop_delay 대기 후 화면 재캡처 (grab_screen)
-     speed2/3 확인 (conf=speed_confidence, region_ui):
-       있음 → _key_routine() → Loop Start
-       없음 → ⑤ 변환루트 (key_skip=False)
+③ [초반 분기] (f9_early_branch_on=True, is_auto_sell_set 무관)
+     seal 좌클릭 (sx, sy) → sleep(0.2)
 
-⑤ 변환루트 (_conversion_route)
-     ④ 경로 (key_skip=False): seal_idle 이미 클릭됨 → 즉시 myth_text_coord 클릭
-     ② 경로 (key_skip=True):  seal_idle 폴링 (최대 5회 × 0.5s)
-       감지 → 클릭 → myth_text_coord 클릭
-       미감지 → 사이클 스킵 → Loop Start
-     myth_text_coord 클릭 (+step_delay)
-     myth_text 탐색 (conf=search_confidence, region_ui):
-       없음 → _normal_conversion() → Loop Start
-       있음 → _special_conversion_check()
+     speed3 감지 (SPEED3_CONF=0.78, info_reg):
+       key 있음 (KEY_CONF=0.78, field_reg) →
+         key 좌클릭 + target 우클릭 (inp.click / inp.rclick) → sleep(1.0) → continue
+       key 없음 → sleep(0.5) → continue
+
+     speed2 감지 (SPEED2_CONF=0.93, info_reg):
+       25box / 26box / 27box 중 하나라도 있으면 → continue (변환 스킵)
+       박스 없음 + key 있음 →
+         key 좌클릭 + target 우클릭 → sleep(1.0) → continue
+       박스 없음 + key 없음 → sleep(0.5) → continue
+
+     speed2/3 모두 없음 → ④ 로 계속
+
+④ 변환 초기 클릭 (gx+gw*0.6, gy+gh*0.5-30) → sleep(0.2)
+
+⑤ [bou(파편) 판정] (bou, conf=0.6, info_reg)
+     bou 없음 → 초월인장 일반변환:
+       seal 좌클릭 + target 우클릭
+     bou 있음 →
+       스크린샷 캡처
+       count_1/2/3 탐색 (COUNT_CONF=0.94, info_reg)
+
+       count 매칭됨 (found_num=1~3):
+         _check_double_digit → True (우측 12×14px 밝은 픽셀, 10개+) → A키 (종말인장)
+         _check_double_digit → False → seal 좌클릭 + target 우클릭 (초월인장)
+
+       count 미매칭 (4개+, 인식 초과) → A키 (종말인장)
+
+     sleep(1.0) → Loop Start
 ```
 
 ---
 
 ## 서브루틴
 
-### _key_routine
+### _check_double_digit
 ```
-key 탐색 (region_game)
-  없음 → _conversion_route()
-  있음 → key 클릭 → target 우클릭
-         28box 감시 → 있으면 _handle_28box() → return
-         key_speed_delay 대기 → Loop Start
-```
-
-### _handle_28box
-```
-3키 입력 → check_on_offset 이동
-on 탐색:
-  있음 → 아무것도 안 함
-  없음 → 클릭 (OFF→ON 전환)
-```
-
-### _normal_conversion
-```
-seal_idle 클릭 → target 우클릭 → Loop Start
-```
-
-### _special_conversion_check
-```
-bou 탐색 (conf=search_confidence, region_ui)
-  없음 → _normal_conversion()
-  있음 → bou 우측 (bx+5, by-20, 130×50) 영역에서 count_1/2/3 탐색 (conf=count_confidence)
-    count 있음(1~3) → _normal_conversion()
-    count 없음(4+)  → _do_special_conversion()
-```
-
-### _do_special_conversion
-```
-[루프]
-  seal_idle 폴링 (최대 5회 × 0.5s, region_game) → 클릭
-    미감지 시 루프 종료 → Loop Start
-  myth_text_coord 클릭 (+step_delay)
-  화면 재캡처 후 bou 탐색 (conf=search_confidence, region_ui):
-    없음          → Loop Start 복귀 (rclick 생략)
-    있음 + count 1~3 (conf=count_confidence) → _normal_conversion() → return
-    있음 + count 4+  → A키 입력 → loop_delay → 루프 반복
+count 이미지 우측(+2px) 12×14px 영역 픽셀 스캔
+  밝기 > 80인 픽셀 발견 → True (10개 이상)
+  없음 → False
+  matched_num이 2 or 3이면 좌측 16px에서 count_1 추가 탐색 → 있으면 True
 ```
 
 ### _pet_upgrade_check
@@ -132,12 +118,19 @@ ENTER → @태초 → ENTER
 
 ---
 
-## key_skip 플래그
-- F9 시작 시 False 초기화
-- 28box ON 확인 시 True
-- True 상태: ② 에서 변환루트만 진행 (seal 폴링 후 myth_text_coord 클릭)
-
----
+## 이미지 매칭 정확도 상수 (코드 내 하드코딩)
+| 상수 | 값 | 적용 대상 |
+|---|---|---|
+| SEAL_CONF | 0.75 | seal_idle |
+| TARGET_CONF | 0.65 | target_circle / target_circle2 |
+| SPEED2_CONF | 0.93 | speed2 |
+| SPEED3_CONF | 0.78 | speed3 |
+| COUNT_CONF | 0.94 | count_1 / count_2 / count_3 |
+| BOX25_CONF | 0.91 | 25box |
+| BOX26_CONF | 0.91 | 26box |
+| BOX27_CONF | 0.91 | 27box |
+| ON_CONF | 0.70 | on |
+| KEY_CONF | 0.78 | key |
 
 ## 설정창 탭 구성
 | 탭 | 내용 |
@@ -149,12 +142,6 @@ ENTER → @태초 → ENTER
 | 고급1 | F9/F7 딜레이 |
 | 고급2 | 이미지 매칭 정확도 (나머지/box/count/speed) |
 
-### 이미지 매칭 정확도 키
-| 키 | 기본값 | 적용 대상 |
-|---|---|---|
-| `search_confidence` | 0.85 | target_circle, seal_idle, key, myth_text, bou 등 나머지 |
-| `box28_confidence_set` | 0.97 | 26box / 28box |
-| `count_confidence` | 0.85 | count_1 / count_2 / count_3 |
-| `speed_confidence` | 0.85 | speed2 / speed3 |
+---
 
-_최종 업데이트: 2026-06-26 — speed_confidence 분리 / count 1~3 → _normal_conversion 복원 / _do_special_conversion 루프 순서 확정(seal폴링→myth→bou→A키)_
+_최종 업데이트: 2026-06-26 — F9 루프 전면 재작성 (macro.exe 바이트코드 추출 기반) / 28box 자동판매: '3'키 입력 방식 / speed2/3 감지 시 열쇠 삽입 (is_auto_sell_set 무관) / COUNT_CONF 0.94로 상향_

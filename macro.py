@@ -424,6 +424,9 @@ class Finder:
             x, y, w, h = region
             src = screen[y:y+h, x:x+w]
         th, tw = tmpl.shape[:2]
+        sh, sw = src.shape[:2]
+        if sh < th or sw < tw:
+            return None
         res = cv2.matchTemplate(src, tmpl, cv2.TM_CCOEFF_NORMED)
         _, maxv, _, maxloc = cv2.minMaxLoc(res)
         c = conf if conf is not None else self._conf
@@ -460,6 +463,9 @@ class Finder:
             return None
         scr    = self._grab(region)
         h, w   = tmpl.shape[:2]
+        sh, sw = scr.shape[:2]
+        if sh < h or sw < w:
+            return None
         result = cv2.matchTemplate(scr, tmpl, cv2.TM_CCOEFF_NORMED)
         _, maxv, _, maxloc = cv2.minMaxLoc(result)
         c  = float(conf if conf is not None else self._conf)
@@ -467,6 +473,30 @@ class Finder:
             ox = region[0] if region else 0
             oy = region[1] if region else 0
             return (maxloc[0] + w // 2 + ox, maxloc[1] + h // 2 + oy)
+        return None
+
+    def find_box(
+        self,
+        name: str,
+        conf: Optional[float] = None,
+        region: Optional[Tuple] = None,
+    ) -> Optional[Tuple[int, int, int, int]]:
+        """이미지 탐색. 발견 시 (left, top, w, h) 반환, 없으면 None."""
+        tmpl = self._load(name)
+        if tmpl is None:
+            return None
+        scr = self._grab(region)
+        th, tw = tmpl.shape[:2]
+        sh, sw = scr.shape[:2]
+        if sh < th or sw < tw:
+            return None
+        res = cv2.matchTemplate(scr, tmpl, cv2.TM_CCOEFF_NORMED)
+        _, maxv, _, maxloc = cv2.minMaxLoc(res)
+        c = float(conf if conf is not None else self._conf)
+        if maxv >= c:
+            ox = region[0] if region else 0
+            oy = region[1] if region else 0
+            return (maxloc[0] + ox, maxloc[1] + oy, tw, th)
         return None
 
     def find_score(
@@ -1340,337 +1370,186 @@ class Macro:
         self._f9thr.start()
 
     def _f9_loop(self) -> None:
-        conf       = self.cfg.get("search_confidence", 0.85)
-        b28_conf   = self.cfg.get("box28_confidence_set", 0.97)
-        spd_conf   = self.cfg.get("speed_confidence", 0.85)
-        key_skip   = False   # 28box ON 확인 후 열쇠루틴 스킵 플래그
+        # macro.exe 추출 정확도 상수
+        SEAL_CONF   = 0.75
+        TARGET_CONF = 0.65
+        SPEED2_CONF = 0.93
+        SPEED3_CONF = 0.78
+        COUNT_CONF  = 0.94
+        BOX25_CONF  = 0.91
+        BOX26_CONF  = 0.91
+        BOX27_CONF  = 0.91
+        ON_CONF     = 0.70
+        KEY_CONF    = 0.78
+
+        is_auto_sell_set = False
 
         while not self._stop.is_set():
             try:
-                # ── Loop Start ──────────────────────────
-                self.inp.press("f2")
-                time.sleep(self.cfg.get("step_delay", 0.1))
+                # ── 게임 창 위치/크기 ────────────────────
+                hwnd = _sc_find_hwnd()
+                if not hwnd:
+                    time.sleep(1)
+                    continue
+                gx, gy, gw, gh = _sc_get_rect(hwnd)
+                if gw <= 0 or gh <= 0:
+                    time.sleep(1)
+                    continue
 
                 self._pet_upgrade_check()
                 if self._stop.is_set():
                     break
 
-                gr     = self._abs_region("region_game")
-                ur     = self._abs_region("region_ui")
-                screen = self.finder.grab_screen()
+                # ── 탐색 영역 (게임 창 상대 비율) ─────────
+                box_reg   = (int(gx + gw*0.10), int(gy + gh*0.60), int(gw*0.40), int(gh*0.20))
+                info_reg  = (int(gx + gw*0.25), int(gy + gh*0.75), int(gw*0.45), int(gh*0.23))
+                cmd_reg   = (int(gx + gw*0.65), int(gy + gh*0.65), int(gw*0.35), int(gh*0.35))
+                field_reg = (gx + 50, gy + 50, gw - 100, gh - 250)
+                full_reg  = (gx, gy, gw, gh)
+                b28_conf  = self.cfg.get("box28_confidence_set", 0.93)
 
-                # ① target_circle / target_circle2 탐색
-                tc = self.finder.find_any_in(screen, ["target_circle", "target_circle2"], conf, gr)
-                if not tc:
-                    if not hasattr(self, "_last_tc_log") or time.time() - self._last_tc_log > 10:
-                        log.info("  [F9] target_circle 탐색 중...")
-                        self._last_tc_log = time.time()
-                    time.sleep(self.cfg.get("loop_delay", 0.5))
-                    continue
-                _, tcx, tcy = tc
-
-                # ② 스킵 모드 확인 → ⑤ 변환루트
-                # key_skip 은 F9 ON 동안만 유지 (재시작 시 False 초기화)
-                if key_skip:
-                    log.info("  [②스킵] 변환루트 진행")
-                    time.sleep(self.cfg.get("loop_delay", 0.5))
-                    self._conversion_route(tcx, tcy, conf, gr, ur, b28_conf, key_skip=True)
-                    continue
-
-                # ③ 28box 확인 (26box 감지 시 오인식 방지 → 열쇠루틴으로 패스)
-                p26 = self.finder.find_in(screen, "26box", b28_conf, ur)
-                if p26:
-                    log.info("  [③] 26box 감지 → 28box 제외, 열쇠루틴 진행")
-                else:
-                    p28 = self.finder.find_in(screen, "28box", b28_conf, ur)
-                    if p28:
-                        on_p = self.finder.find_in(screen, "on", 0.85, ur)
-                        if on_p:
-                            log.info("  [③] 28box + ON 확인 → key_skip = True")
-                            key_skip = True
-                            time.sleep(self.cfg.get("loop_delay", 0.5))
-                            continue
+                # ── 28box 자동 판매 설정 ──────────────────
+                if self.cfg.get("f9_box28_monitor_on", True) and not is_auto_sell_set:
+                    if self.finder.find("28box", b28_conf, box_reg):
+                        log.info("📦 [28상자 발견] 자동 판매 설정 시작")
+                        log.info("⌨️ [자동판매] '3' 키 입력")
+                        self.inp.press("3")
+                        time.sleep(0.5)
+                        _off = self.cfg.get("check_on_offset", [0, 0])
+                        if _off and (_off[0] != 0 or _off[1] != 0):
+                            cx, cy = self._abs_coord("check_on_offset")
                         else:
-                            log.info("  [③] 28box + OFF → ON 전환 처리")
-                            self._handle_28box(ur)
-                            key_skip = True
-                            log.info("  [스킵 모드 ON] F9 재시작 전까지 유지")
-                            time.sleep(self.cfg.get("loop_delay", 0.5))
-                            continue
+                            cx, cy = self._abs_xy("check_on_offset_x", "check_on_offset_y")
+                        pyautogui.moveTo(cx, cy)
+                        time.sleep(0.4)
+                        if self.finder.find("on", ON_CONF, cmd_reg):
+                            log.info("✅ [자동판매] ON 확인 → 설정 완료")
+                        else:
+                            log.info("⌨️ [자동판매] ON 미감지 → A키 입력")
+                            self.inp.press("a")
+                        is_auto_sell_set = True
+                        time.sleep(0.5)
+                        continue
 
-                # ④ seal_idle 확인 (region_game)
-                seal = self.finder.find_in(screen, "seal_idle", conf, gr)
-                if not seal:
-                    log.info("  [④] seal_idle 미감지 → Loop Start")
-                    time.sleep(self.cfg.get("loop_delay", 0.5))
+                # ── seal_idle + target_circle 탐색 ────────
+                seal = self.finder.find("seal_idle", SEAL_CONF, field_reg)
+                target = self.finder.find("target_circle", TARGET_CONF, full_reg)
+                if not target:
+                    target = self.finder.find("target_circle2", TARGET_CONF, full_reg)
+
+                if not (seal and target):
+                    time.sleep(0.12)
                     continue
-                log.info("  [④] seal_idle 감지 → 클릭")
-                self.inp.click(*seal)
-                if self._stop.is_set():
-                    break
 
-                # loop_delay 후 재캡처
-                time.sleep(self.cfg.get("loop_delay", 0.5))
-                screen = self.finder.grab_screen()
+                sx, sy = seal
+                tx, ty = target
 
-                # speed2/3 확인
-                speed = self.finder.find_any_in(screen, ["speed2", "speed3"], spd_conf, ur)
-                if speed:
-                    log.info("  speed %s 감지 → 열쇠루틴", speed[0])
-                    self._key_routine(tcx, tcy, conf, b28_conf, gr, ur)
+                # ── 초반 분기 ────────────────────────────
+                if self.cfg.get("f9_early_branch_on", True):
+                    log.info("⚙️ [초반 분기] 대기 인장 선택")
+                    pyautogui.click(int(sx), int(sy))
+                    time.sleep(0.05)
+
+                    if self.finder.find("speed3", SPEED3_CONF, info_reg):
+                        log.info("⏩ speed3(3배속) 감지 → 열쇠 탐색")
+                        key_res = self.finder.find("key", KEY_CONF, field_reg)
+                        if key_res:
+                            log.info("🔑 열쇠 발견 → 클릭 후 타겟 우클릭")
+                            self.inp.click(int(key_res[0]), int(key_res[1]))
+                            self.inp.rclick(int(tx), int(ty))
+                            time.sleep(1.0)
+                        else:
+                            log.info("🔍 speed3 감지 / 열쇠 없음 → 대기")
+                            time.sleep(0.2)
+                        continue
+
+                    elif self.finder.find("speed2", SPEED2_CONF, info_reg):
+                        log.info("▶️ speed2(2배속) 감지 → 열쇠 탐색")
+                        key_res = self.finder.find("key", KEY_CONF, field_reg)
+                        if key_res:
+                            log.info("🔑 열쇠 발견 → 클릭 후 타겟 우클릭")
+                            self.inp.click(int(key_res[0]), int(key_res[1]))
+                            self.inp.rclick(int(tx), int(ty))
+                            time.sleep(1.0)
+                        else:
+                            log.info("🔍 speed2 감지 / 열쇠 없음 → 대기")
+                            time.sleep(0.2)
+                        continue
+
+                # ── 변환 초기 클릭 ────────────────────────
+                pyautogui.click(int(gx + gw * 0.6), int(gy + gh * 0.5) - 30)
+                time.sleep(0.1)
+
+                # ── bou(파편) 판정 ────────────────────────
+                bou_found = self.finder.find("bou", 0.6, info_reg)
+
+                if not bou_found:
+                    log.info("🔮 [초월인장] 파편 0개 → 일반 변환")
+                    pyautogui.click(int(sx), int(sy))
+                    time.sleep(0.1)
+                    pyautogui.rightClick(int(tx), int(ty))
                 else:
-                    log.info("  speed 미감지 → ⑤ 변환루트")
-                    self._conversion_route(tcx, tcy, conf, gr, ur, b28_conf)
+                    snapshot    = pyautogui.screenshot()
+                    found_num   = None
+                    matched_box = None
+                    for i in range(1, 4):
+                        c_box = self.finder.find_box(f"count_{i}", COUNT_CONF, info_reg)
+                        if c_box:
+                            found_num   = i
+                            matched_box = c_box
+                            break
+
+                    if found_num and matched_box:
+                        if self._check_double_digit(matched_box, found_num, snapshot):
+                            log.info("💀 [종말인장] 숫자 %d 주변 다른 숫자(10개+) → A키", found_num)
+                            self.inp.press("a")
+                        else:
+                            log.info("🔮 [초월인장] 파편 %d개 부족 → 일반 변환", 4 - found_num)
+                            pyautogui.click(int(sx), int(sy))
+                            time.sleep(0.1)
+                            pyautogui.rightClick(int(tx), int(ty))
+                    else:
+                        log.info("💀 [종말인장] 파편 4개+ (인식 초과) → A키")
+                        self.inp.press("a")
+
+                time.sleep(0.5)
 
             except Exception as e:
                 log.error("F9 루프 오류: %s", e, exc_info=True)
-                time.sleep(0.5)
+                time.sleep(1.0)
 
         log.info("F9 루프 종료")
+
+    def _check_double_digit(self, box: Tuple, matched_num: int, snapshot) -> bool:
+        """count 이미지 우측 12×14픽셀 스캔 → 밝은 픽셀(>80) 있으면 True (10개 이상 판정)"""
+        if snapshot is None:
+            return False
+        left, top, width, height = box
+        gsx = int(left + width + 2)
+        gsy = int(top)
+        for dx in range(12):
+            for dy in range(14):
+                try:
+                    pv = snapshot.getpixel((gsx + dx, gsy + dy))
+                    v  = pv[0] if isinstance(pv, tuple) else pv
+                    if v > 80:
+                        return True
+                except Exception:
+                    pass
+        if matched_num in (2, 3):
+            lr = (int(left - 16), int(top - 2), 20, int(height + 4))
+            if self.finder.find_box("count_1", 0.88, lr):
+                return True
+        return False
+
     # ── 주기적 펫 업그레이드 ──────────────
     def _pet_upgrade_check(self) -> None:
         interval = self.cfg.get("f9_pet_interval", 200)
         if time.time() - self._pet_t >= interval:
             log.info("[펫 업그레이드] 실행")
+            self.inp.press("2")
             self.inp.type_seq(self.cfg.get("f9_pet_upgrade", ""))
             self._pet_t = time.time()
-
-    # ── seal 확인 ─────────────────────────
-    def _seal_check(self, conf: float) -> None:
-        p = self.finder.find("seal_idle", conf)
-        if p:
-            log.debug("seal_idle 클릭: %s", p)
-            self.inp.click(*p)
-
-    def _seal_check_in(self, screen: np.ndarray, conf: float,
-                       region: Optional[Tuple] = None) -> None:
-        """캡처된 화면에서 seal_idle 확인 (추가 캡처 없음)"""
-        p = self.finder.find_in(screen, "seal_idle", conf, region)
-        if p:
-            log.debug("seal_idle 클릭: %s", p)
-            self.inp.click(*p)
-
-    # ─────────────────────────────────────
-    # 열쇠 루틴
-    # ─────────────────────────────────────
-    def _key_routine(self, tcx: int, tcy: int, conf: float, b28_conf: float,
-                     gr: Optional[Tuple] = None, ur: Optional[Tuple] = None) -> None:
-        """
-        key 클릭 → target 우클릭 → key_speed_delay 대기 → Loop Start 복귀.
-        Loop Start에서 F2 + speed 확인이 자동으로 이루어짐.
-        key 없으면 변환 루트 / 28box 감지 시 처리 후 종료.
-        """
-        log.info("  [열쇠 루틴]")
-        self._pet_upgrade_check()
-
-        key_p = self.finder.find("key", conf, gr)
-        if not key_p:
-            log.info("  [열쇠루틴] key 이미지 미감지 → 변환루트")
-            self._conversion_route(tcx, tcy, conf, gr, ur, b28_conf)
-            return
-
-        log.info("  [열쇠루틴] key 감지 @ %s → 삽입", key_p)
-        # 열쇠 1회 삽입
-        self.inp.click(*key_p)
-        self.inp.rclick(tcx, tcy)
-
-        # 28box 감시
-        if self.cfg.get("f9_box28_monitor_on", True):
-            time.sleep(self.cfg.get("step_delay", 0.1))
-            scr = self.finder.grab_screen()
-            p28 = self.finder.find_in(scr, "28box", b28_conf, ur)
-            if p28:
-                log.info("  28box 감지!")
-                self._handle_28box(ur)
-                return
-
-        # speed 반영 대기 → return → Loop Start (F2 + speed 자동 확인)
-        time.sleep(self.cfg.get("key_speed_delay", 1.0))
-        log.info("  열쇠 삽입 완료 → Loop Start 복귀")
-
-    def _handle_28box(self, ur: Optional[Tuple] = None) -> None:
-        """28box 처리: 3 입력 → ON/OFF 확인 및 전환"""
-        self.inp.press("3")
-        time.sleep(self.cfg.get("step_delay", 0.2))
-
-        # check_on_offset [x,y] 우선 / 없으면 x,y 개별키 fallback
-        _off = self.cfg.get("check_on_offset", [0, 0])
-        if _off and (_off[0] != 0 or _off[1] != 0):
-            cx, cy = self._abs_coord("check_on_offset")
-        else:
-            cx, cy = self._abs_xy("check_on_offset_x", "check_on_offset_y")
-        self.inp.move(cx, cy)
-        time.sleep(self.cfg.get("step_delay", 0.2))
-
-        on_p = self.finder.find("on", 0.85, ur)
-        if on_p:
-            log.info("  ON 상태 확인 → 열쇠 루틴 종료")
-        else:
-            log.info("  OFF 상태 → ON 전환 후 종료")
-            self.inp.click(cx, cy)
-
-    # ─────────────────────────────────────
-    # 변환 루트
-    # ─────────────────────────────────────
-    def _conversion_route(self, tcx: int, tcy: int, conf: float,
-                          gr: Optional[Tuple] = None, ur: Optional[Tuple] = None,
-                          b28_conf: float = 0.97, key_skip: bool = False) -> None:
-        """
-        myth_text_coord 클릭 → myth_text 유무로 분기:
-          없음 → 일반 변환
-          있음 → 특수 변환 판별 (bou + count)
-        """
-        log.info("  [변환 루트]")
-        mc = self._abs_coord("myth_text_coord")
-
-        if mc == [0, 0]:
-            log.warning("  myth_text_coord 미설정 (config.json 확인)")
-
-        step = self.cfg.get("step_delay", 0.2)
-
-        # ④ 경로: seal_idle 이미 클릭됨 → 즉시 myth_text_coord 진행
-        # ② 경로(key_skip=True): 이전 변환 완료 후 seal_idle idle 복귀 대기 후 클릭
-        if key_skip:
-            seal_found = False
-            for attempt in range(5):
-                scr  = self.finder.grab_screen()
-                seal = self.finder.find_in(scr, "seal_idle", conf, gr)
-                if seal:
-                    log.info("  [변환루트] seal_idle 클릭 (②경로, 시도 %d)", attempt + 1)
-                    self.inp.click(*seal)
-                    time.sleep(step)
-                    seal_found = True
-                    break
-                log.info("  [변환루트] seal_idle 대기... (%d/5)", attempt + 1)
-                time.sleep(0.5)
-            if not seal_found:
-                log.warning("  [변환루트] seal_idle 미감지 → 사이클 스킵")
-                return
-
-        self.inp.move(*mc)
-        self.inp.click()
-        time.sleep(step)
-
-        myth = self.finder.find("myth_text", conf, ur)
-        if not myth:
-            self._normal_conversion(tcx, tcy, conf, gr)
-        else:
-            self._special_conversion_check(tcx, tcy, conf, ur, gr, b28_conf, key_skip)
-
-    def _normal_conversion(self, tcx: int, tcy: int, conf: float,
-                           gr: Optional[Tuple] = None) -> None:
-        """일반 변환: seal_idle 클릭 → target 우클릭 → step_delay 대기 → Loop Start"""
-        log.info("  → 일반 변환 → Loop Start 복귀")
-        sp = self.finder.find("seal_idle", conf, gr)
-        if sp:
-            self.inp.click(*sp)
-        self.inp.rclick(tcx, tcy)
-        time.sleep(self.cfg.get("step_delay", 0.1))
-        # return → _conversion_route → _f9_loop 상단(Loop Start)으로 복귀
-
-    def _special_conversion_check(self, tcx: int, tcy: int, conf: float,
-                                   ur: Optional[Tuple] = None,
-                                   gr: Optional[Tuple] = None,
-                                   b28_conf: float = 0.97,
-                                   key_skip: bool = False) -> None:
-        """
-        특수 변환 판별:
-          bou 탐색 → bou 우측 영역에서 count_1/2/3 탐색
-            count 있음(1~3) → 특수 불가 → 일반 변환
-            count 없음(4+)  → 특수 변환 수행
-        """
-        log.info("  → 특수 변환 판별")
-        bp = self.finder.find("bou", conf, ur)
-        if not bp:
-            log.warning("  bou 없음 → 일반 변환 fallback")
-            self._normal_conversion(tcx, tcy, conf, gr)
-            return
-
-        bx, by = bp
-        count_region = (bx + 5, by - 20, 130, 50)
-        log.info("  bou @ (%d,%d)  count_region=%s", bx, by, count_region)
-
-        cnt_conf = self.cfg.get("count_confidence", conf)
-        count_found = False
-        for i in range(1, 4):
-            score = self.finder.find_score(f"count_{i}", count_region)
-            hit   = score >= cnt_conf
-            log.info("  count_%d score=%.3f (conf=%.2f) → %s", i, score, cnt_conf, "HIT" if hit else "miss")
-            if hit:
-                count_found = True
-                break
-
-        if count_found:
-            log.info("  count 1~3 확인 → 특수 변환 불가 → 일반 변환")
-            self._normal_conversion(tcx, tcy, conf, gr)
-            return
-        else:
-            log.info("  count 4+ 확인 → 특수 변환 수행")
-            self._do_special_conversion(tcx, tcy, conf, b28_conf, gr, ur, key_skip)
-
-    def _do_special_conversion(self, tcx: int = 0, tcy: int = 0,
-                               conf: float = 0.85, b28_conf: float = 0.97,
-                               gr: Optional[Tuple] = None,
-                               ur: Optional[Tuple] = None,
-                               key_skip: bool = False) -> None:
-        """
-        특수 변환 루프:
-          A키 입력 → 0.5s 대기
-          → seal_idle 클릭 → myth_text_coord 클릭
-          → bou 탐색:
-              없음          → _normal_conversion() → return
-              있음 + count 1~3 → _normal_conversion() → return
-              있음 + count 없음(4+) → 루프 반복
-        """
-        log.info("  [특수 변환] 루프 시작")
-        mc   = self._abs_coord("myth_text_coord")
-        step = self.cfg.get("step_delay", 0.1)
-
-        while not self._stop.is_set():
-            # seal_idle 폴링 (최대 5회) — A키 후 애니메이션 종료 대기
-            for attempt in range(5):
-                scr  = self.finder.grab_screen()
-                seal = self.finder.find_in(scr, "seal_idle", conf, gr)
-                if seal:
-                    self.inp.click(*seal)
-                    log.info("    seal_idle 클릭 (시도 %d)", attempt + 1)
-                    time.sleep(step)
-                    break
-                log.info("    seal_idle 대기... (%d/5)", attempt + 1)
-                time.sleep(0.5)
-            else:
-                log.warning("  [특수 변환] seal_idle 미감지 → 루프 종료")
-                return
-
-            # myth_text_coord 클릭
-            self.inp.move(*mc)
-            self.inp.click()
-            time.sleep(step)
-
-            # bou 탐색
-            scr = self.finder.grab_screen()
-            bp  = self.finder.find_in(scr, "bou", conf, ur)
-            if not bp:
-                log.info("  [특수 변환] bou 없음 → Loop Start 복귀")
-                return
-
-            bx, by = bp
-            cnt_conf    = self.cfg.get("count_confidence", conf)
-            count_found = any(
-                self.finder.find_in(scr, f"count_{i}", cnt_conf, (bx + 5, by - 20, 130, 50))
-                for i in range(1, 4)
-            )
-            if count_found:
-                log.info("  [특수 변환] count 1~3 감지 → 일반 변환")
-                self._normal_conversion(tcx, tcy, conf, gr)
-                return
-
-            log.info("  [특수 변환] count 4+ 유지 → A키 입력")
-            # A 키
-            self.inp.press("a")
-            time.sleep(self.cfg.get("loop_delay", 0.5))
-
-        log.info("  [특수 변환] 중단 → Loop Start")
 
     # ─────────────────────────────────────
     # 시작
