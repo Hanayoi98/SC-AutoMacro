@@ -36,7 +36,10 @@
        없음 → ⑤ 변환루트
 
 ⑤ 변환루트 (_conversion_route)
-     speed 없으면 seal_idle 클릭
+     ④ 경로 (key_skip=False): seal_idle 이미 클릭됨 → 즉시 myth_text_coord 클릭
+     ② 경로 (key_skip=True):  seal_idle 폴링 (최대 5회 × 0.5s)
+       감지 → 클릭 → myth_text_coord 클릭
+       미감지 → 사이클 스킵 → Loop Start
      myth_text_coord 클릭 (+step_delay)
      myth_text 탐색:
        없음 → _normal_conversion()   → Loop Start
@@ -81,10 +84,10 @@ bou 탐색
 ### _do_special_conversion
 ```
 [루프]
-  seal_idle 폴링 (최대 5회 × step_delay) → 클릭
-    미감지 시 루프 종료
-  myth_text_coord 클릭
-  bou 탐색:
+  seal_idle 폴링 (최대 5회 × 0.5s) → 클릭
+    미감지 시 루프 종료 → Loop Start
+  myth_text_coord 클릭 (+step_delay)
+  bou 탐색 (화면 재캡처):
     없음          → _normal_conversion() → return
     있음 + count 1~3 → _normal_conversion() → return
     있음 + count 4+  → A키 입력 → loop_delay → 루프 반복
@@ -153,4 +156,4 @@ ENTER → @태초 → ENTER
 | `box28_confidence_set` | 28box |
 | `count_confidence` | count_1 / count_2 / count_3 |
 
-_최종 업데이트: 2026-06-26 — 변환루트 seal_idle 폴링 추가 / 특수변환 루프 순서 재구성 (seal→myth→bou→A키)_
+_최종 업데이트: 2026-06-26 — ② 경로 seal 폴링(5회×0.5s) / count 1~3 시 rclick 생략(오브젝트 이동 방지) / 특수변환 루프 순서 재구성(seal→myth→bou→A키)_
