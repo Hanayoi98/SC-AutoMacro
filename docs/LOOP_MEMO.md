@@ -64,8 +64,9 @@ on 탐색:
   없음 → 클릭 (OFF→ON 전환)
 ```
 
-### _bou_conversion  ← 신규 (myth_text_coord 제거)
+### _bou_conversion
 ```
+myth_text_coord 클릭 (+step_delay)
 화면 재캡처
 bou 탐색 (conf=search_confidence, region_ui):
   없음 (파편 0개) → rclick(target) 일반변환
@@ -143,4 +144,4 @@ ENTER → @태초 → ENTER
 | `count_confidence` | 0.85 | count_1 / count_2 / count_3 |
 | `speed_confidence` | 0.85 | speed2 / speed3 |
 
-_최종 업데이트: 2026-06-26 — myth_text_coord 제거 / speed2→변환 speed3→열쇠 분리 / _bou_conversion 신규 추가_
+_최종 업데이트: 2026-06-26 — _bou_conversion에 myth_text_coord 클릭 복원_

@@ -1543,11 +1543,22 @@ class Macro:
                         ur: Optional[Tuple] = None) -> None:
         """
         speed2 감지 후 변환 판별:
-          bou 탐색:
+          myth_text_coord 클릭 → bou 탐색:
             없음 (파편 0개)  → rclick(target) 일반변환
             있음 + count 1~3 → rclick(target) 일반변환
             있음 + count 4+  → A키 특수변환
         """
+        mc   = self._abs_coord("myth_text_coord")
+        step = self.cfg.get("step_delay", 0.2)
+
+        if mc == [0, 0]:
+            log.warning("  [변환] myth_text_coord 미설정 → bou 탐색 진행")
+        else:
+            log.info("  [변환] myth_text_coord 클릭")
+            self.inp.move(*mc)
+            self.inp.click()
+            time.sleep(step)
+
         scr = self.finder.grab_screen()
         bp  = self.finder.find_in(scr, "bou", conf, ur)
 
