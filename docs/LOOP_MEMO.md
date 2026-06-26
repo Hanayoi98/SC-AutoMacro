@@ -152,8 +152,9 @@ ENTER → @태초 → ENTER
 ### 이미지 매칭 정확도 키
 | 키 | 적용 대상 |
 |---|---|
-| `search_confidence` | target_circle, seal_idle, speed2/3, key, myth_text, bou 등 나머지 |
-| `box28_confidence_set` | 28box |
+| `search_confidence` | target_circle, seal_idle, key, myth_text, bou 등 나머지 |
+| `box28_confidence_set` | 26box / 28box |
 | `count_confidence` | count_1 / count_2 / count_3 |
+| `speed_confidence` | speed2 / speed3 |
 
 _최종 업데이트: 2026-06-26 — ② 경로 seal 폴링(5회×0.5s) / count 1~3 시 rclick 생략(오브젝트 이동 방지) / 특수변환 루프 순서 재구성(seal→myth→bou→A키)_

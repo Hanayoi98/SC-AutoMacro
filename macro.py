@@ -186,6 +186,7 @@ DEFAULT_CONFIG: dict = {
     # ── 탐색 · 입력 튜닝 (F9 루프) ──
     "search_confidence": 0.85,
     "count_confidence":  0.85,
+    "speed_confidence":  0.85,
     "input_delay":       0.5,
     "loop_delay":        0.5,
     "mouse_move_dur":    0.5,
@@ -207,6 +208,7 @@ _NUM_KEYS = {
     "check_on_offset_y":   int,
     "search_confidence":   float,
     "count_confidence":    float,
+    "speed_confidence":    float,
     "input_delay":         float,
     "loop_delay":          float,
     "mouse_move_dur":      float,
@@ -758,6 +760,7 @@ class SettingsWindow:
             ("그 외 나머지 (0~1)", "search_confidence",   "num"),
             ("box 정확도 (0~1)",   "box28_confidence_set","num"),
             ("count 정확도 (0~1)", "count_confidence",    "num"),
+            ("speed 정확도 (0~1)", "speed_confidence",    "num"),
         ]
         self._cfg_rows(f, rows)
 
@@ -1337,9 +1340,10 @@ class Macro:
         self._f9thr.start()
 
     def _f9_loop(self) -> None:
-        conf      = self.cfg.get("search_confidence", 0.85)
-        b28_conf  = self.cfg.get("box28_confidence_set", 0.97)
-        key_skip  = False   # 28box ON 확인 후 열쇠루틴 스킵 플래그
+        conf       = self.cfg.get("search_confidence", 0.85)
+        b28_conf   = self.cfg.get("box28_confidence_set", 0.97)
+        spd_conf   = self.cfg.get("speed_confidence", 0.85)
+        key_skip   = False   # 28box ON 확인 후 열쇠루틴 스킵 플래그
 
         while not self._stop.is_set():
             try:
@@ -1410,7 +1414,7 @@ class Macro:
                 screen = self.finder.grab_screen()
 
                 # speed2/3 확인
-                speed = self.finder.find_any_in(screen, ["speed2", "speed3"], conf, ur)
+                speed = self.finder.find_any_in(screen, ["speed2", "speed3"], spd_conf, ur)
                 if speed:
                     log.info("  speed %s 감지 → 열쇠루틴", speed[0])
                     self._key_routine(tcx, tcy, conf, b28_conf, gr, ur)
