@@ -139,9 +139,55 @@ ENTER → @태초 → ENTER
 | 좌표 설정 | A/B/C/M/ON 좌표 |
 | F6 설정 | 채팅·식별코드·분기 |
 | F9 설정 | 펫·28box 감시 |
+| F11 설정 | 방장모드 ON/OFF · 유저 닉네임 |
 | 고급1 | F9/F7 딜레이 |
 | 고급2 | 이미지 매칭 정확도 (나머지/box/count/speed) |
 
 ---
 
-_최종 업데이트: 2026-06-26 — F9 루프 전면 재작성 (macro.exe 바이트코드 추출 기반) / 28box 자동판매: '3'키 입력 방식 / speed2/3 감지 시 열쇠 삽입 (is_auto_sell_set 무관) / COUNT_CONF 0.94로 상향_
+## F11 방장모드 루프 (`_host_loop`)
+
+```
+[F11 시작]
+  │
+  ├─ Step 1: Host_1 대기 (0.1s 폴링)
+  │   Host_1 감지 → 클릭 → sleep(3.0s) → Step 2
+  │   Host_1 없음 + Host_3 감지 → sleep(1.0s) → Step 3 이동
+  │   Host_1/3 없음 + Host_2 감지 → sleep(1.0s) → Step 2 이동
+  │   정지 요청 → 종료
+  │
+  ├─ Step 2: Host_2 대기 (0.1s 폴링)
+  │   Host_3 감지 → sleep(1.0s) → Step 3 이동
+  │   Host_2 감지 → 클릭 → sleep(2.5s) → Step 3
+  │   정지 요청 → 종료
+  │
+  └─ Step 3: Host_3 OCR 루프 (0.1s 폴링)
+      Host_3 미감지 → continue (재탐색)
+      Host_3 감지 → OCR 실행
+        전원 확인 → sleep(3.0s) → Host_4 클릭 → 종료
+        미확인 있음 → sleep(0.5s) → 재탐색
+```
+
+### 상수 및 설정
+| 항목 | 값 | 설명 |
+|---|---|---|
+| HOST_CONF | 0.65 | 이미지 매칭 임계값 |
+| OCR 오프셋 | x-720, y-518 | Host_3 중심 기준 닉네임 슬롯 좌상단 |
+| OCR 크기 | 290×340 px | 닉네임 슬롯 전체 영역 |
+| OCR PSM | 6 | 블록 텍스트 |
+| 유사도 임계 | 0.70 | difflib OCR 오인식 보정 |
+| sleep Step1 클릭 후 | 3.0s | |
+| sleep Step2 클릭 후 | 2.5s | |
+| sleep 전원확인 후 | 3.0s | Host_4 클릭 전 대기 |
+
+### 이미지 파일
+| 파일 | 설명 |
+|---|---|
+| Host_1.png | Step1 감지 대상 |
+| Host_2.png | Step2 감지 대상 |
+| Host_3.png | Step3 로비 감지 (닉네임 슬롯 블랙아웃) |
+| Host_4.png | 전원 확인 후 클릭 대상 |
+
+---
+
+_최종 업데이트: 2026-06-27 — v1.1: F11 방장모드 추가 (OCR 닉네임 전원 확인 후 Host_4 클릭) / Host_3 템플릿 슬롯 블랙아웃 처리 / difflib 유사도 매칭 적용_

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-StarCraft Auto Macro v1.1
+StarCraft Auto Macro v1.2
 이미지 인식 기반 스타크래프트 자동화 매크로
 
 단축키
@@ -9,6 +9,7 @@ StarCraft Auto Macro v1.1
   F7  : autosetting 대기 후 업그레이드/마우스 루틴
   F8  : @태초 채팅 전송
   F9  : 메인 루프 시작/정지 (토글)
+  F11 : 방장모드 시작/정지 (토글)
   Ctrl+F12 : 매크로 종료
 """
 
@@ -20,6 +21,7 @@ import logging
 import threading
 import subprocess
 import queue
+import difflib
 from typing import List, Optional, Tuple
 
 # ──────────────────────────────────────────────────────────
@@ -39,6 +41,8 @@ _REQUIRED_PACKAGES = [
     ("pyautogui",    "pyautogui"),
     ("pyperclip",    "pyperclip"),
     ("mss",          "mss"),
+    ("pytesseract",  "pytesseract"),
+    ("PIL",          "Pillow"),
 ]
 
 
@@ -99,6 +103,10 @@ import keyboard
 import pyautogui
 import pyperclip
 from mss import mss
+import pytesseract
+from PIL import Image as _PILImage
+
+pytesseract.pytesseract.tesseract_cmd = r"C:\Program Files\Tesseract-OCR\tesseract.exe"
 
 try:
     import win32gui
@@ -193,6 +201,9 @@ DEFAULT_CONFIG: dict = {
     "step_delay":        0.2,
     "key_speed_delay":   1.0,
     "window_size":       [0, 0],
+    # ── F11 방장모드 ──
+    "f10_host_mode_on":  False,
+    "host_username":     "Hanayoi",
     # ── F7 전용 딜레이 ──
     "f7_input_delay":    0.15,
     "f7_step_delay":     0.2,
@@ -690,6 +701,7 @@ class SettingsWindow:
         self._tab_coords(nb)
         self._tab_f6(nb)
         self._tab_f9(nb)
+        self._tab_f10(nb)
         self._tab_advanced1(nb)
         self._tab_advanced2(nb)
 
@@ -762,7 +774,17 @@ class SettingsWindow:
         ]
         self._cfg_rows(f, rows)
 
-    # ── 탭 5: 고급1 (딜레이) ─────────────────────
+    # ── 탭 5: F11 방장모드 ───────────────────────
+    def _tab_f10(self, nb):
+        f = self._frame(nb); nb.add(f, text=" F11 방장 ")
+        self._lbl(f, "[ 방장모드 (F11 토글) ]", bold=True, fg=self.C_ACC).pack(anchor="w", pady=(8,2), padx=10)
+        rows = [
+            ("방장모드 사용",   "f10_host_mode_on", "bool"),
+            ("유저 닉네임",     "host_username",    "str"),
+        ]
+        self._cfg_rows(f, rows)
+
+    # ── 탭 6: 고급1 (딜레이) ─────────────────────
     def _tab_advanced1(self, nb):
         f = self._frame(nb); nb.add(f, text=" 고급1 ")
         self._lbl(f, "[ F9 루프 ]", bold=True, fg=self.C_ACC).pack(anchor="w", pady=(8,2), padx=10)
@@ -917,17 +939,23 @@ class SettingsWindow:
 class ConfigUI:
     """메인 창 — 간결한 상태 표시 + F9 제어 + 설정 버튼"""
 
-    C_BG = "#1e1e2e"; C_BG2 = "#313244"; C_BG3 = "#45475a"
-    C_FG = "#cdd6f4"; C_FG2 = "#a6adc8"
-    C_ACC = "#89b4fa"; C_GREEN = "#a6e3a1"; C_RED = "#f38ba8"
-    FONT  = ("Malgun Gothic", 9)
-    FONTB = ("Malgun Gothic", 10, "bold")
+    # ── 색상 팔레트 (Catppuccin Mocha 기반) ──
+    C_BG   = "#1e1e2e"; C_BG2  = "#181825"; C_BG3  = "#313244"; C_BG4 = "#45475a"
+    C_FG   = "#cdd6f4"; C_FG2  = "#a6adc8"; C_FG3  = "#6c7086"
+    C_ACC  = "#89b4fa"; C_MAUVE= "#cba6f7"; C_TEAL = "#94e2d5"
+    C_GREEN= "#a6e3a1"; C_RED  = "#f38ba8"; C_YELL = "#f9e2af"
+    C_PINK = "#f5c2e7"
+    FONT   = ("Malgun Gothic", 9)
+    FONTB  = ("Malgun Gothic", 9, "bold")
+    FONTS  = ("Malgun Gothic", 8)
+    FONTM  = ("Consolas", 9)
 
     F_DESC = [
-        ("F6", "채팅 (@자동1) + 식별코드 입력"),
-        ("F7", "autosetting 대기 → 펫 업그레이드 → 마우스 루틴"),
-        ("F8", "@태초 채팅 전송"),
-        ("F9", "메인 루프  시작 / 정지  (토글)"),
+        ("F6",  "#f9e2af", "채팅 + 식별코드 입력"),
+        ("F7",  "#cba6f7", "펫 업그레이드 · 마우스 루틴"),
+        ("F8",  "#94e2d5", "@태초 채팅 전송"),
+        ("F9",  "#a6e3a1", "메인 루프  시작 / 정지"),
+        ("F11", "#f5c2e7", "방장모드  시작 / 정지"),
     ]
 
     def __init__(self, macro: "Macro") -> None:
@@ -939,98 +967,144 @@ class ConfigUI:
 
     def _build(self):
         r = self.root
-        r.title("SC Auto Macro")
+        r.title("SC Auto Macro  v1.2")
         r.configure(bg=self.C_BG)
         r.attributes("-topmost", True)
         r.resizable(False, False)
         r.protocol("WM_DELETE_WINDOW", self._quit)
 
-        # ── 헤더 ─────────────────────────
-        tk.Label(r, text="SC Auto Macro  v1.0", font=("Malgun Gothic",12,"bold"),
-                 bg=self.C_BG, fg=self.C_ACC).pack(pady=(12,4))
+        # ── 상단 액센트 바 ────────────────
+        tk.Frame(r, height=3, bg=self.C_ACC).pack(fill="x")
 
-        # ── 상태 표시 ─────────────────────
-        self._status_sv = tk.StringVar(value="○  정지")
-        tk.Label(r, textvariable=self._status_sv, font=self.FONTB,
-                 bg=self.C_BG, fg=self.C_FG2, width=20).pack(pady=2)
+        # ── 헤더 카드 ────────────────────
+        hdr = tk.Frame(r, bg=self.C_BG2)
+        hdr.pack(fill="x", padx=0, pady=0)
 
-        tk.Frame(r, height=1, bg=self.C_BG3).pack(fill="x", padx=12, pady=6)
+        left_hdr = tk.Frame(hdr, bg=self.C_BG2)
+        left_hdr.pack(side="left", padx=16, pady=10)
+        tk.Label(left_hdr, text="SC AUTO MACRO", font=("Malgun Gothic",13,"bold"),
+                 bg=self.C_BG2, fg=self.C_FG).pack(anchor="w")
+        tk.Label(left_hdr, text="StarCraft Automation Suite",
+                 font=self.FONTS, bg=self.C_BG2, fg=self.C_FG3).pack(anchor="w")
 
-        # ── 단축키 설명 ───────────────────
-        for key, desc in self.F_DESC:
-            row = tk.Frame(r, bg=self.C_BG); row.pack(fill="x", padx=16, pady=1)
-            tk.Label(row, text=key, font=self.FONTB, bg=self.C_BG,
-                     fg=self.C_ACC, width=4, anchor="w").pack(side="left")
-            tk.Label(row, text=desc, font=self.FONT, bg=self.C_BG,
-                     fg=self.C_FG2, anchor="w").pack(side="left")
+        ver_frame = tk.Frame(hdr, bg=self.C_BG3, padx=8, pady=4)
+        ver_frame.pack(side="right", padx=16, pady=10)
+        tk.Label(ver_frame, text="v1.2", font=("Malgun Gothic",10,"bold"),
+                 bg=self.C_BG3, fg=self.C_ACC).pack()
 
-        tk.Frame(r, height=1, bg=self.C_BG3).pack(fill="x", padx=12, pady=8)
+        # ── 상태 표시 카드 ───────────────
+        status_card = tk.Frame(r, bg=self.C_BG3, pady=8)
+        status_card.pack(fill="x", padx=12, pady=(10,4))
 
-        # ── 버튼 영역 ─────────────────────
-        bot = tk.Frame(r, bg=self.C_BG); bot.pack(pady=(0,12), padx=16)
+        self._status_dot = tk.Label(status_card, text="●", font=("Malgun Gothic",11),
+                                     bg=self.C_BG3, fg=self.C_RED)
+        self._status_dot.pack(side="left", padx=(14,4))
+        self._status_sv = tk.StringVar(value="정지 중")
+        tk.Label(status_card, textvariable=self._status_sv, font=self.FONTB,
+                 bg=self.C_BG3, fg=self.C_FG).pack(side="left")
 
-        self._f9_btn = tk.Button(bot, text="▶  F9 시작", font=self.FONTB,
+        self._host_dot = tk.Label(status_card, text="●", font=("Malgun Gothic",11),
+                                   bg=self.C_BG3, fg=self.C_BG4)
+        self._host_dot.pack(side="right", padx=(4,4))
+        tk.Label(status_card, text="방장", font=self.FONTS,
+                 bg=self.C_BG3, fg=self.C_FG3).pack(side="right", padx=(14,0))
+
+        # ── 단축키 패널 ──────────────────
+        keys_frame = tk.Frame(r, bg=self.C_BG2)
+        keys_frame.pack(fill="x", padx=12, pady=(6,4))
+
+        for key, color, desc in self.F_DESC:
+            row = tk.Frame(keys_frame, bg=self.C_BG2)
+            row.pack(fill="x", padx=8, pady=2)
+            badge = tk.Frame(row, bg=color, padx=5, pady=1)
+            badge.pack(side="left")
+            tk.Label(badge, text=key, font=("Malgun Gothic",8,"bold"),
+                     bg=color, fg="#1e1e2e").pack()
+            tk.Label(row, text=desc, font=self.FONT,
+                     bg=self.C_BG2, fg=self.C_FG2).pack(side="left", padx=8)
+
+        # ── 구분선 ───────────────────────
+        tk.Frame(r, height=1, bg=self.C_BG4).pack(fill="x", padx=12, pady=8)
+
+        # ── 버튼 행 1: 메인 컨트롤 ───────
+        row1 = tk.Frame(r, bg=self.C_BG); row1.pack(padx=12, pady=(0,4), fill="x")
+
+        self._f9_btn = tk.Button(row1, text="▶  F9 시작", font=self.FONTB,
                                   bg=self.C_GREEN, fg="#1e1e2e",
-                                  relief="flat", padx=14, pady=6,
-                                  activebackground="#94e2a1",
+                                  relief="flat", padx=14, pady=7,
+                                  activebackground="#b9f0c6",
+                                  cursor="hand2",
                                   command=self._toggle_f9)
-        self._f9_btn.pack(side="left", padx=(0,8))
+        self._f9_btn.pack(side="left", padx=(0,6), fill="x", expand=True)
 
-        tk.Button(bot, text="⚙  설정", font=self.FONT,
-                  bg=self.C_BG2, fg=self.C_FG,
-                  relief="flat", padx=12, pady=6,
-                  activebackground=self.C_BG3,
-                  command=self._open_settings).pack(side="left", padx=(0,8))
+        self._f10_btn = tk.Button(row1, text="♟  F11 방장", font=self.FONTB,
+                                   bg=self.C_BG3, fg=self.C_PINK,
+                                   relief="flat", padx=14, pady=7,
+                                   activebackground=self.C_BG4,
+                                   cursor="hand2",
+                                   command=self._toggle_f10)
+        self._f10_btn.pack(side="left", fill="x", expand=True)
 
-        tk.Button(bot, text="🖥  해상도 적용", font=self.FONT,
-                  bg=self.C_BG2, fg=self.C_ACC,
-                  relief="flat", padx=12, pady=6,
-                  activebackground=self.C_BG3,
-                  command=self._apply_resolution).pack(side="left", padx=(0,8))
+        # ── 버튼 행 2: 서브 컨트롤 ───────
+        row2 = tk.Frame(r, bg=self.C_BG); row2.pack(padx=12, pady=(0,10), fill="x")
 
-        tk.Button(bot, text="✕  종료", font=self.FONT,
-                  bg=self.C_BG2, fg=self.C_RED,
-                  relief="flat", padx=12, pady=6,
-                  activebackground=self.C_BG3,
-                  command=self._quit).pack(side="left")
+        tk.Button(row2, text="⚙  설정", font=self.FONTS,
+                  bg=self.C_BG3, fg=self.C_FG,
+                  relief="flat", padx=10, pady=5,
+                  activebackground=self.C_BG4, cursor="hand2",
+                  command=self._open_settings).pack(side="left", padx=(0,4), fill="x", expand=True)
 
-        # ── 로그 패널 (토글) ───────────────
-        tk.Frame(r, height=1, bg=self.C_BG3).pack(fill="x", padx=12, pady=(4,0))
+        tk.Button(row2, text="🖥  해상도", font=self.FONTS,
+                  bg=self.C_BG3, fg=self.C_ACC,
+                  relief="flat", padx=10, pady=5,
+                  activebackground=self.C_BG4, cursor="hand2",
+                  command=self._apply_resolution).pack(side="left", padx=(0,4), fill="x", expand=True)
+
+        tk.Button(row2, text="✕  종료", font=self.FONTS,
+                  bg=self.C_BG3, fg=self.C_RED,
+                  relief="flat", padx=10, pady=5,
+                  activebackground=self.C_BG4, cursor="hand2",
+                  command=self._quit).pack(side="left", fill="x", expand=True)
+
+        # ── 로그 패널 ────────────────────
+        tk.Frame(r, height=1, bg=self.C_BG4).pack(fill="x", padx=12)
 
         log_hdr = tk.Frame(r, bg=self.C_BG); log_hdr.pack(fill="x", padx=12, pady=(4,0))
-        tk.Label(log_hdr, text="이벤트 로그", font=self.FONT,
-                 bg=self.C_BG, fg=self.C_FG2).pack(side="left")
+        tk.Label(log_hdr, text="LOG", font=("Consolas",8,"bold"),
+                 bg=self.C_BG, fg=self.C_FG3).pack(side="left")
         self._log_toggle_sv = tk.StringVar(value="▼ 펼치기")
-        tk.Button(log_hdr, textvariable=self._log_toggle_sv, font=self.FONT,
-                  bg=self.C_BG, fg=self.C_ACC, relief="flat",
+        tk.Button(log_hdr, textvariable=self._log_toggle_sv, font=self.FONTS,
+                  bg=self.C_BG, fg=self.C_ACC, relief="flat", cursor="hand2",
                   command=self._toggle_log).pack(side="right")
+        tk.Button(log_hdr, text="지우기", font=self.FONTS,
+                  bg=self.C_BG, fg=self.C_FG3, relief="flat", cursor="hand2",
+                  command=self._clear_log).pack(side="right", padx=4)
 
-        # 로그 텍스트 영역 (기본 숨김)
         self._log_frame = tk.Frame(r, bg=self.C_BG)
         self._log_text = tk.Text(
-            self._log_frame,
-            height=10, width=62,
-            bg="#11111b", fg="#a6adc8",
+            self._log_frame, height=10, width=58,
+            bg=self.C_BG2, fg="#a6adc8",
             font=("Consolas", 8),
             relief="flat", state="disabled",
-            wrap="none",
+            wrap="none", insertbackground=self.C_FG,
         )
-        sb_y = tk.Scrollbar(self._log_frame, command=self._log_text.yview)
+        sb_y = tk.Scrollbar(self._log_frame, command=self._log_text.yview, width=10)
         sb_x = tk.Scrollbar(self._log_frame, orient="horizontal",
-                             command=self._log_text.xview)
-        self._log_text.configure(yscrollcommand=sb_y.set,
-                                  xscrollcommand=sb_x.set)
+                             command=self._log_text.xview, width=10)
+        self._log_text.configure(yscrollcommand=sb_y.set, xscrollcommand=sb_x.set)
         sb_y.pack(side="right", fill="y")
         sb_x.pack(side="bottom", fill="x")
-        self._log_text.pack(fill="both", expand=True)
-        # 처음엔 숨김
+        self._log_text.pack(fill="both", expand=True, padx=(12,0))
         self._log_visible = False
-        tk.Button(r, text="로그 지우기", font=("Malgun Gothic",8),
-                  bg=self.C_BG, fg=self.C_FG2, relief="flat",
-                  command=self._clear_log).pack(pady=(0,8))
+
+        # ── 하단 액센트 바 ────────────────
+        tk.Frame(r, height=2, bg=self.C_BG3).pack(fill="x", pady=(6,0))
 
     def _toggle_f9(self):
         threading.Thread(target=self.macro.f9, daemon=True).start()
+
+    def _toggle_f10(self):
+        threading.Thread(target=self.macro.f10, daemon=True).start()
 
     def _open_settings(self):
         if self._settings is None:
@@ -1042,13 +1116,23 @@ class ConfigUI:
         """500ms 마다 F9 상태 + 로그 큐 일괄 갱신"""
         # F9 상태
         if self.macro._f9thr and self.macro._f9thr.is_alive():
-            self._status_sv.set("●  실행 중")
+            self._status_sv.set("실행 중")
+            self._status_dot.configure(fg=self.C_GREEN)
             self._f9_btn.configure(text="■  F9 정지", bg=self.C_RED, fg="#1e1e2e",
                                    activebackground="#f5a0b0")
         else:
-            self._status_sv.set("○  정지")
+            self._status_sv.set("정지 중")
+            self._status_dot.configure(fg=self.C_RED)
             self._f9_btn.configure(text="▶  F9 시작", bg=self.C_GREEN, fg="#1e1e2e",
-                                   activebackground="#94e2a1")
+                                   activebackground="#b9f0c6")
+
+        # F11 방장모드 상태
+        if self.macro._f10thr and self.macro._f10thr.is_alive():
+            self._host_dot.configure(fg=self.C_PINK)
+            self._f10_btn.configure(text="■  F11 방장 정지", fg=self.C_RED)
+        else:
+            self._host_dot.configure(fg=self.C_BG4)
+            self._f10_btn.configure(text="♟  F11 방장", fg=self.C_PINK)
 
         # 로그 큐 → 텍스트 위젯 (로그 패널이 열려 있을 때만)
         if self._log_visible:
@@ -1150,6 +1234,8 @@ class Macro:
         self._stop    = threading.Event()
         self._f9thr:  Optional[threading.Thread] = None
         self._pet_t   = 0.0
+        self._f10stop = threading.Event()
+        self._f10thr: Optional[threading.Thread] = None
         self.ui: Optional[ConfigUI] = None   # 설정 UI (start() 에서 생성)
 
     def save_config(self) -> None:
@@ -1369,6 +1455,170 @@ class Macro:
         self._f9thr  = threading.Thread(target=self._f9_loop, daemon=True)
         self._f9thr.start()
 
+    # ─────────────────────────────────────
+    # F11: 방장모드 시작/정지
+    # ─────────────────────────────────────
+    def f10(self) -> None:
+        if not self.cfg.get("f10_host_mode_on", False):
+            log.warning("F11: 방장모드 비활성 (설정에서 활성화 필요)")
+            return
+
+        if self._f10thr and self._f10thr.is_alive():
+            log.info("═══ F11 방장모드 정지 ═══")
+            self._f10stop.set()
+            return
+
+        if not is_sc_active():
+            log.warning("F11: 스타크래프트 비활성 - 무시")
+            return
+
+        log.info("═══ F11 방장모드 시작 ═══")
+        self._f10stop.clear()
+        self._f10thr = threading.Thread(target=self._host_loop, daemon=True)
+        self._f10thr.start()
+
+    def _host_loop(self) -> None:
+        HOST_CONF = 0.65
+
+        def _full():
+            hwnd = _sc_find_hwnd()
+            if not hwnd:
+                return None
+            gx, gy, gw, gh = _sc_get_rect(hwnd)
+            return (gx, gy, gw, gh) if gw > 0 else None
+
+        def _find(name):
+            reg = _full()
+            if reg is None:
+                return None
+            return self.finder.find(name, HOST_CONF, reg)
+
+        def _click_and_wait(name: str, delay: float) -> None:
+            res = _find(name)
+            if res:
+                self.inp.click(int(res[0]), int(res[1]))
+                log.info("✅ [방장] %s 클릭", name)
+                time.sleep(delay)
+
+        def _ocr_username(h3_pos) -> str:
+            # Host_3 중심 기준 닉네임 슬롯 전체 영역 (x-720, y-518, 290×340)
+            px = max(0, int(h3_pos[0]) - 720)
+            py = max(0, int(h3_pos[1]) - 518)
+            pw, ph = 290, 340
+            shot = pyautogui.screenshot(region=(px, py, pw, ph))
+            img  = cv2.cvtColor(np.array(shot), cv2.COLOR_RGB2GRAY)
+            _, img = cv2.threshold(img, 80, 255, cv2.THRESH_BINARY)
+            img = cv2.resize(img, (pw * 2, ph * 2), interpolation=cv2.INTER_CUBIC)
+            return pytesseract.image_to_string(_PILImage.fromarray(img), config="--psm 6 -c tessedit_char_whitelist=ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_'").strip()
+
+        usernames = [u.strip() for u in self.cfg.get("host_username", "Hanayoi").split(",") if u.strip()]
+
+        try:
+            # ── Step 1 ─────────────────────────────────────────
+            log.info("🔍 [방장] Step1: Host_1 대기")
+            goto_step = 2  # 기본값: Host_1 클릭 후 Step2
+            step1_done = False
+            while not self._f10stop.is_set():
+                time.sleep(0.1)
+                h1 = _find("Host_1")
+                if h1:
+                    log.info("✅ [방장] Host_1 감지 → 클릭")
+                    self.inp.click(int(h1[0]), int(h1[1]))
+                    time.sleep(3.0)
+                    step1_done = True
+                    break
+
+                # Host_1 없음: Host_3 확인
+                h3 = _find("Host_3")
+                if h3:
+                    log.info("⏭️ [방장] Host_1 없음 / Host_3 감지 → Step3 이동")
+                    time.sleep(1.0)
+                    goto_step = 3
+                    step1_done = True
+                    break
+
+                # Host_3 없음: Host_2 확인
+                h2 = _find("Host_2")
+                if h2:
+                    log.info("⏭️ [방장] Host_1 없음 / Host_2 감지 → Step2 이동")
+                    time.sleep(1.0)
+                    goto_step = 2
+                    step1_done = True
+                    break
+
+            if not step1_done:
+                return  # 정지 요청
+
+            # ── Step 2 ─────────────────────────────────────────
+            if goto_step <= 2:
+                log.info("🔍 [방장] Step2: Host_2 대기")
+                while not self._f10stop.is_set():
+                    time.sleep(0.1)
+                    # Host_3(OCR 영역) 먼저 확인 → 바로 Step3
+                    h3 = _find("Host_3")
+                    if h3:
+                        log.info("⏭️ [방장] Step2 중 Host_3 감지 → Step3 이동")
+                        time.sleep(1.0)
+                        break
+
+                    h2 = _find("Host_2")
+                    if h2:
+                        log.info("✅ [방장] Host_2 감지 → 클릭")
+                        self.inp.click(int(h2[0]), int(h2[1]))
+                        time.sleep(2.5)
+                        break
+                else:
+                    return
+
+            # ── Step 3 ─────────────────────────────────────────
+            def _ocr_match(username: str, ocr_lines: list) -> bool:
+                """OCR 각 행과 유사도 비교 (0.70 이상이면 매칭)."""
+                u = username.lower()
+                for line in ocr_lines:
+                    l = line.strip().lower()
+                    if not l:
+                        continue
+                    # 직접 포함 체크
+                    if u in l:
+                        return True
+                    # 유사도 체크 (OCR 오인식 보정)
+                    ratio = difflib.SequenceMatcher(None, u, l).ratio()
+                    if ratio >= 0.70:
+                        return True
+                return False
+
+            reg0 = _full()
+            if reg0:
+                log.info("🖥️ [방장] 게임 창 크기: %dx%d", reg0[2], reg0[3])
+            log.info("🔍 [방장] Step3: Host_3 OCR 루프 시작 (닉네임: %s)", ", ".join(usernames))
+            while not self._f10stop.is_set():
+                time.sleep(0.1)
+                h3 = _find("Host_3")
+                if not h3:
+                    continue
+
+                log.info("🟡 [방장] Host_3 감지 → OCR")
+                ocr_text = _ocr_username(h3)
+                log.info("📋 [방장] OCR: %r", ocr_text)
+                ocr_lines = ocr_text.splitlines()
+
+                found   = [u for u in usernames if _ocr_match(u, ocr_lines)]
+                missing = [u for u in usernames if not _ocr_match(u, ocr_lines)]
+                log.info("✅ 확인: %s | ❌ 미확인: %s", found, missing)
+                if not missing:
+                    log.info("🎯 [방장] 전원 확인 (%s) → 3.0s 후 Host_4 클릭", ", ".join(found))
+                    time.sleep(3.0)
+                    _click_and_wait("Host_4", 0.5)
+                    break
+                else:
+                    log.info("⏳ [방장] 미확인 인원 있음 → 재탐색")
+                    time.sleep(0.5)
+
+        except Exception as e:
+            log.error("[방장] 루프 오류: %s", e, exc_info=True)
+
+        log.info("═══ F11 방장모드 종료 ═══")
+
     def _f9_loop(self) -> None:
         # macro.exe 추출 정확도 상수
         SEAL_CONF   = 0.75
@@ -1567,6 +1817,7 @@ class Macro:
         keyboard.add_hotkey("f7",        spawn(self.f7))
         keyboard.add_hotkey("f8",        spawn(self.f8))
         keyboard.add_hotkey("f9",        spawn(self.f9))
+        keyboard.add_hotkey("f11",       spawn(self.f10))
         keyboard.add_hotkey("ctrl+f12",  self._quit)
         keyboard.add_hotkey("ctrl+f11",
                             lambda: self.root.after(0, self.ui.toggle)
