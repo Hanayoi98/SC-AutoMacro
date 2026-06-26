@@ -1369,12 +1369,38 @@ class Macro:
                     continue
                 _, tcx, tcy = tc
 
-                # ② 스킵 모드 확인 → ⑤ 변환루트
-                # key_skip 은 F9 ON 동안만 유지 (재시작 시 False 초기화)
+                # ② 스킵 모드 확인 (28box ON) → seal 폴링 후 speed2 → 변환루트
                 if key_skip:
-                    log.info("  [②스킵] 변환루트 진행")
+                    log.info("  [②스킵] seal 폴링 후 변환루트 진행")
                     time.sleep(self.cfg.get("loop_delay", 0.5))
-                    self._conversion_route(tcx, tcy, conf, gr, ur, b28_conf, key_skip=True)
+                    seal_found = False
+                    for attempt in range(5):
+                        scr2 = self.finder.grab_screen()
+                        seal2 = self.finder.find_in(scr2, "seal_idle", conf, gr)
+                        if seal2:
+                            log.info("  [②스킵] seal_idle 클릭 (시도 %d)", attempt + 1)
+                            self.inp.click(*seal2)
+                            time.sleep(self.cfg.get("step_delay", 0.2))
+                            seal_found = True
+                            break
+                        log.info("  [②스킵] seal_idle 대기... (%d/5)", attempt + 1)
+                        time.sleep(0.5)
+                    if seal_found:
+                        time.sleep(self.cfg.get("loop_delay", 0.5))
+                        scr2 = self.finder.grab_screen()
+                        spd3 = self.finder.find_in(scr2, "speed3", spd_conf, ur)
+                        if spd3:
+                            log.info("  [②스킵] speed3 감지 → 열쇠루틴")
+                            self._key_routine(tcx, tcy, conf, b28_conf, gr, ur)
+                        else:
+                            spd2 = self.finder.find_in(scr2, "speed2", spd_conf, ur)
+                            if spd2:
+                                log.info("  [②스킵] speed2 감지 → 변환루트")
+                                self._bou_conversion(tcx, tcy, conf, gr, ur)
+                            else:
+                                log.info("  [②스킵] speed 미감지 → Loop Start")
+                    else:
+                        log.warning("  [②스킵] seal_idle 미감지 → 사이클 스킵")
                     continue
 
                 # ③ 28box 확인 (26box 감지 시 오인식 방지 → 열쇠루틴으로 패스)
@@ -1413,14 +1439,15 @@ class Macro:
                 time.sleep(self.cfg.get("loop_delay", 0.5))
                 screen = self.finder.grab_screen()
 
-                # speed2/3 확인
-                speed = self.finder.find_any_in(screen, ["speed2", "speed3"], spd_conf, ur)
-                if speed:
-                    log.info("  speed %s 감지 → 열쇠루틴", speed[0])
+                # speed 확인 (speed3 → 열쇠루틴 / speed2 → 변환루트 / 없음 → Loop Start)
+                if self.finder.find_in(screen, "speed3", spd_conf, ur):
+                    log.info("  speed3 감지 → 열쇠루틴")
                     self._key_routine(tcx, tcy, conf, b28_conf, gr, ur)
+                elif self.finder.find_in(screen, "speed2", spd_conf, ur):
+                    log.info("  speed2 감지 → 변환루트")
+                    self._bou_conversion(tcx, tcy, conf, gr, ur)
                 else:
-                    log.info("  speed 미감지 → ⑤ 변환루트")
-                    self._conversion_route(tcx, tcy, conf, gr, ur, b28_conf)
+                    log.info("  speed 미감지 → Loop Start")
 
             except Exception as e:
                 log.error("F9 루프 오류: %s", e, exc_info=True)
@@ -1465,8 +1492,7 @@ class Macro:
 
         key_p = self.finder.find("key", conf, gr)
         if not key_p:
-            log.info("  [열쇠루틴] key 이미지 미감지 → 변환루트")
-            self._conversion_route(tcx, tcy, conf, gr, ur, b28_conf)
+            log.info("  [열쇠루틴] key 이미지 미감지 → Loop Start 복귀")
             return
 
         log.info("  [열쇠루틴] key 감지 @ %s → 삽입", key_p)
@@ -1512,6 +1538,44 @@ class Macro:
     # ─────────────────────────────────────
     # 변환 루트
     # ─────────────────────────────────────
+    def _bou_conversion(self, tcx: int, tcy: int, conf: float,
+                        gr: Optional[Tuple] = None,
+                        ur: Optional[Tuple] = None) -> None:
+        """
+        speed2 감지 후 변환 판별:
+          bou 탐색:
+            없음 (파편 0개)  → rclick(target) 일반변환
+            있음 + count 1~3 → rclick(target) 일반변환
+            있음 + count 4+  → A키 특수변환
+        """
+        scr = self.finder.grab_screen()
+        bp  = self.finder.find_in(scr, "bou", conf, ur)
+
+        if not bp:
+            log.info("  [변환] bou 없음 → 일반변환 (rclick)")
+            self.inp.rclick(tcx, tcy)
+            return
+
+        bx, by = bp
+        cnt_conf    = self.cfg.get("count_confidence", conf)
+        count_region = (bx + 5, by - 20, 130, 50)
+
+        count_found = False
+        for i in range(1, 4):
+            score = self.finder.find_score(f"count_{i}", count_region)
+            hit   = score >= cnt_conf
+            log.info("  count_%d score=%.3f → %s", i, score, "HIT" if hit else "miss")
+            if hit:
+                count_found = True
+                break
+
+        if count_found:
+            log.info("  [변환] count 1~3 → 일반변환 (rclick)")
+            self.inp.rclick(tcx, tcy)
+        else:
+            log.info("  [변환] count 4+ → 특수변환 (A키)")
+            self.inp.press("a")
+
     def _conversion_route(self, tcx: int, tcy: int, conf: float,
                           gr: Optional[Tuple] = None, ur: Optional[Tuple] = None,
                           b28_conf: float = 0.97, key_skip: bool = False) -> None:
