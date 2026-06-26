@@ -88,8 +88,8 @@ bou 탐색
     미감지 시 루프 종료 → Loop Start
   myth_text_coord 클릭 (+step_delay)
   bou 탐색 (화면 재캡처):
-    없음          → _normal_conversion() → return
-    있음 + count 1~3 → _normal_conversion() → return
+    없음          → Loop Start 복귀 (rclick 생략)
+    있음 + count 1~3 → Loop Start 복귀 (rclick 생략, 오브젝트 이동 방지)
     있음 + count 4+  → A키 입력 → loop_delay → 루프 반복
 ```
 

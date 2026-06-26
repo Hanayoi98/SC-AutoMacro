@@ -1646,8 +1646,7 @@ class Macro:
             scr = self.finder.grab_screen()
             bp  = self.finder.find_in(scr, "bou", conf, ur)
             if not bp:
-                log.info("  [특수 변환] bou 없음 → 일반 변환")
-                self._normal_conversion(tcx, tcy, conf, gr)
+                log.info("  [특수 변환] bou 없음 → Loop Start 복귀")
                 return
 
             bx, by = bp
@@ -1657,8 +1656,7 @@ class Macro:
                 for i in range(1, 4)
             )
             if count_found:
-                log.info("  [특수 변환] count 1~3 감지 → 일반 변환")
-                self._normal_conversion(tcx, tcy, conf, gr)
+                log.info("  [특수 변환] count 1~3 감지 → Loop Start 복귀 (rclick 생략)")
                 return
 
             log.info("  [특수 변환] count 4+ 유지 → A키 입력")
