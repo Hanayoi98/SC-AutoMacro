@@ -1343,7 +1343,6 @@ class Macro:
         conf       = self.cfg.get("search_confidence", 0.85)
         b28_conf   = self.cfg.get("box28_confidence_set", 0.97)
         spd_conf   = self.cfg.get("speed_confidence", 0.85)
-        key_skip   = False   # 28box ON 확인 후 열쇠루틴 스킵 플래그
 
         while not self._stop.is_set():
             try:
@@ -1369,40 +1368,6 @@ class Macro:
                     continue
                 _, tcx, tcy = tc
 
-                # ② 스킵 모드 확인 (28box ON) → seal 폴링 후 speed2 → 변환루트
-                if key_skip:
-                    log.info("  [②스킵] seal 폴링 후 변환루트 진행")
-                    time.sleep(self.cfg.get("loop_delay", 0.5))
-                    seal_found = False
-                    for attempt in range(5):
-                        scr2 = self.finder.grab_screen()
-                        seal2 = self.finder.find_in(scr2, "seal_idle", conf, gr)
-                        if seal2:
-                            log.info("  [②스킵] seal_idle 클릭 (시도 %d)", attempt + 1)
-                            self.inp.click(*seal2)
-                            time.sleep(self.cfg.get("step_delay", 0.2))
-                            seal_found = True
-                            break
-                        log.info("  [②스킵] seal_idle 대기... (%d/5)", attempt + 1)
-                        time.sleep(0.5)
-                    if seal_found:
-                        time.sleep(self.cfg.get("loop_delay", 0.5))
-                        scr2 = self.finder.grab_screen()
-                        spd3 = self.finder.find_in(scr2, "speed3", spd_conf, ur)
-                        if spd3:
-                            log.info("  [②스킵] speed3 감지 → 열쇠루틴")
-                            self._key_routine(tcx, tcy, conf, b28_conf, gr, ur)
-                        else:
-                            spd2 = self.finder.find_in(scr2, "speed2", spd_conf, ur)
-                            if spd2:
-                                log.info("  [②스킵] speed2 감지 → 변환루트")
-                                self._bou_conversion(tcx, tcy, conf, gr, ur)
-                            else:
-                                log.info("  [②스킵] speed 미감지 → Loop Start")
-                    else:
-                        log.warning("  [②스킵] seal_idle 미감지 → 사이클 스킵")
-                    continue
-
                 # ③ 28box 확인 (26box 감지 시 오인식 방지 → 열쇠루틴으로 패스)
                 p26 = self.finder.find_in(screen, "26box", b28_conf, ur)
                 if p26:
@@ -1412,15 +1377,12 @@ class Macro:
                     if p28:
                         on_p = self.finder.find_in(screen, "on", 0.85, ur)
                         if on_p:
-                            log.info("  [③] 28box + ON 확인 → key_skip = True")
-                            key_skip = True
+                            log.info("  [③] 28box + ON 확인 → Loop Start")
                             time.sleep(self.cfg.get("loop_delay", 0.5))
                             continue
                         else:
                             log.info("  [③] 28box + OFF → ON 전환 처리")
                             self._handle_28box(ur)
-                            key_skip = True
-                            log.info("  [스킵 모드 ON] F9 재시작 전까지 유지")
                             time.sleep(self.cfg.get("loop_delay", 0.5))
                             continue
 

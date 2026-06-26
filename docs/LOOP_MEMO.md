@@ -17,27 +17,16 @@
      없음 → loop_delay → Loop Start
      있음 → tcx, tcy 저장
 
-② key_skip 플래그 확인 (28box ON 모드)
-     True →
-       loop_delay
-       seal_idle 폴링 (최대 5회 × 0.5s) → 클릭
-         미감지 → 사이클 스킵 → Loop Start
-       loop_delay 후 재캡처
-       speed3 감지 → _key_routine()
-       speed2 감지 → _bou_conversion()
-       speed 없음 → Loop Start
-     False → 계속
+② 28box 확인 (b28_conf=box28_confidence_set, region_ui)
+     26box 감지 → 오인식 방지, ③로 패스
+     28box 감지 + on 있음 → loop_delay → Loop Start
+     28box 감지 + on 없음 → _handle_28box() → loop_delay → Loop Start
+     미감지 → ③
 
-③ 28box 확인 (b28_conf=box28_confidence_set, region_ui)
-     26box 감지 → 오인식 방지, ④로 패스
-     28box 감지 + on 있음 → key_skip=True → loop_delay → Loop Start
-     28box 감지 + on 없음 → _handle_28box() → key_skip=True → loop_delay → Loop Start
-     미감지 → ④
-
-④ seal_idle 확인 (region_game, conf=search_confidence)
+③ seal_idle 확인 (region_game, conf=search_confidence)
      없음 → loop_delay → Loop Start
      있음 → 클릭
-     loop_delay 대기 후 화면 재캡처 (grab_screen)
+     loop_delay 대기 후 화면 재캡처
      speed3 감지 (conf=speed_confidence) → _key_routine() → Loop Start
      speed2 감지 (conf=speed_confidence) → _bou_conversion() → Loop Start
      speed 없음 → Loop Start
@@ -119,13 +108,6 @@ ENTER → @태초 → ENTER
 
 ---
 
-## key_skip 플래그
-- F9 시작 시 False 초기화
-- 28box ON 확인 시 True
-- True 상태: ② 에서 seal 폴링 → speed2/3 확인 → 변환루트 진행
-
----
-
 ## 설정창 탭 구성
 | 탭 | 내용 |
 |---|---|
@@ -144,4 +126,4 @@ ENTER → @태초 → ENTER
 | `count_confidence` | 0.85 | count_1 / count_2 / count_3 |
 | `speed_confidence` | 0.85 | speed2 / speed3 |
 
-_최종 업데이트: 2026-06-26 — _bou_conversion에 myth_text_coord 클릭 복원_
+_최종 업데이트: 2026-06-26 — ② key_skip 루프 삭제, 번호 재정렬_
