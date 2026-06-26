@@ -77,7 +77,7 @@ seal_idle 클릭 → target 우클릭 → Loop Start
 bou 탐색
   없음 → _normal_conversion()
   있음 → bou 우측 130px 영역에서 count_1/2/3 탐색
-    count 있음(1~3) → Loop Start 복귀 (rclick 없음, 오브젝트 이동 방지)
+    count 있음(1~3) → _normal_conversion()
     count 없음(4+)  → _do_special_conversion()
 ```
 
@@ -89,7 +89,7 @@ bou 탐색
   myth_text_coord 클릭 (+step_delay)
   bou 탐색 (화면 재캡처):
     없음          → Loop Start 복귀 (rclick 생략)
-    있음 + count 1~3 → Loop Start 복귀 (rclick 생략, 오브젝트 이동 방지)
+    있음 + count 1~3 → _normal_conversion() → return
     있음 + count 4+  → A키 입력 → loop_delay → 루프 반복
 ```
 

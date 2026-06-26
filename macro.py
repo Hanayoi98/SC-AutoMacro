@@ -1601,7 +1601,8 @@ class Macro:
                 break
 
         if count_found:
-            log.info("  count 1~3 확인 → 특수 변환 불가 → Loop Start 복귀 (rclick 생략)")
+            log.info("  count 1~3 확인 → 특수 변환 불가 → 일반 변환")
+            self._normal_conversion(tcx, tcy, conf, gr)
             return
         else:
             log.info("  count 4+ 확인 → 특수 변환 수행")
@@ -1660,7 +1661,8 @@ class Macro:
                 for i in range(1, 4)
             )
             if count_found:
-                log.info("  [특수 변환] count 1~3 감지 → Loop Start 복귀 (rclick 생략)")
+                log.info("  [특수 변환] count 1~3 감지 → 일반 변환")
+                self._normal_conversion(tcx, tcy, conf, gr)
                 return
 
             log.info("  [특수 변환] count 4+ 유지 → A키 입력")
