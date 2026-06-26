@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-StarCraft Auto Macro v1.0
+StarCraft Auto Macro v1.1
 이미지 인식 기반 스타크래프트 자동화 매크로
 
 단축키
