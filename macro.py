@@ -2038,10 +2038,10 @@ class Macro:
             return False, False
 
         gx, gy, gw, gh = reg
-        rx = self.cfg.get("boss_loop_rx", 0.2677)
-        ry = self.cfg.get("boss_loop_ry", 0.2494)
-        rw = self.cfg.get("boss_loop_rw", 0.4553)
-        rh = self.cfg.get("boss_loop_rh", 0.3024)
+        rx = float(self.cfg.get("boss_loop_rx", 0.2677))
+        ry = float(self.cfg.get("boss_loop_ry", 0.2494))
+        rw = float(self.cfg.get("boss_loop_rw", 0.4553))
+        rh = float(self.cfg.get("boss_loop_rh", 0.3024))
         boss_reg = (
             int(gx + gw * rx),
             int(gy + gh * ry),
