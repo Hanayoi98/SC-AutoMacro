@@ -1600,9 +1600,9 @@ class Macro:
         좌표 C: 싱글클릭 + Q  ×4
         (좌표는 config.json의 coord_a/b/c 에 설정)
         """
-        ca = self.cfg.get("coord_a", [0, 0])
-        cb = self.cfg.get("coord_b", [0, 0])
-        cc = self.cfg.get("coord_c", [0, 0])
+        ca = self._abs_coord("coord_a")
+        cb = self._abs_coord("coord_b")
+        cc = self._abs_coord("coord_c")
 
         if ca == [0, 0] or cb == [0, 0] or cc == [0, 0]:
             log.warning("F7 마우스 루틴: 좌표 A/B/C 미설정 (config.json 확인)")
