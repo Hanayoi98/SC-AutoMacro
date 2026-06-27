@@ -216,6 +216,10 @@ DEFAULT_CONFIG: dict = {
     "host_username":          "Hanayoi",
     "game_end_on":            False,
     "auto_boss_select_on":    False,
+    "boss_loop_rx":           0.2677,
+    "boss_loop_ry":           0.2494,
+    "boss_loop_rw":           0.4553,
+    "boss_loop_rh":           0.3024,
     # ── F7 전용 딜레이 ──
     "f7_input_delay":    0.15,
     "f7_step_delay":     0.2,
@@ -848,6 +852,16 @@ class SettingsWindow:
             ("자동 보스 선택 사용", "auto_boss_select_on", "bool"),
         ]
         self._cfg_rows(f, rows_boss)
+
+        tk.Frame(f, height=1, bg=self.C_BG3).pack(fill="x", padx=10, pady=(10,4))
+        self._lbl(f, "[ 보스 루프 영역 (비율 0.0~1.0) ]", bold=True, fg=self.C_ACC).pack(anchor="w", pady=(4,2), padx=10)
+        rows_bloop = [
+            ("영역 X 비율",  "boss_loop_rx", "num"),
+            ("영역 Y 비율",  "boss_loop_ry", "num"),
+            ("영역 W 비율",  "boss_loop_rw", "num"),
+            ("영역 H 비율",  "boss_loop_rh", "num"),
+        ]
+        self._cfg_rows(f, rows_bloop)
 
     # ── 탭 6: 고급1 (딜레이) ─────────────────────
     def _tab_advanced1(self, nb):
@@ -1892,15 +1906,18 @@ class Macro:
         import glob as _glob
 
         if not is_active:
-            # SelectBoss_1 탐색 영역: SelectBoss_1T 기준 노란 박스 비율 (rx=0.2739, ry=0.1682, rw=0.4522, rh=0.4267)
             gx, gy, gw, gh = reg
-            sb1_reg = (
-                int(gx + gw * 0.2739),
-                int(gy + gh * 0.1682),
-                int(gw * 0.4522),
-                int(gh * 0.4267),
+            rx = self.cfg.get("boss_loop_rx", 0.2677)
+            ry = self.cfg.get("boss_loop_ry", 0.2494)
+            rw = self.cfg.get("boss_loop_rw", 0.4553)
+            rh = self.cfg.get("boss_loop_rh", 0.3024)
+            boss_reg = (
+                int(gx + gw * rx),
+                int(gy + gh * ry),
+                int(gw * rw),
+                int(gh * rh),
             )
-            if self.finder.find("SelectBoss_0", 0.80, sb1_reg):
+            if self.finder.find("SelectBoss_0", 0.80, boss_reg):
                 log.info("🎮 [종료] SelectBoss_0 감지")
                 if self.cfg.get("gamemode_host_on", False) and self.cfg.get("auto_boss_select_on", False):
                     log.info("🎯 [보스선택] 방장모드 + 자동보스선택 ON → 보스선택 시작")
@@ -1911,16 +1928,18 @@ class Macro:
                 return True, False
             return False, False
 
-        # BossClear_2 탐색 영역: BossClear_1T 기준 노란 박스 비율 (rx=0.2677, ry=0.2494, rw=0.4553, rh=0.3024)
         gx, gy, gw, gh = reg
-        bc2_reg = (
-            int(gx + gw * 0.2677),
-            int(gy + gh * 0.2494),
-            int(gw * 0.4553),
-            int(gh * 0.3024),
+        rx = self.cfg.get("boss_loop_rx", 0.2677)
+        ry = self.cfg.get("boss_loop_ry", 0.2494)
+        rw = self.cfg.get("boss_loop_rw", 0.4553)
+        rh = self.cfg.get("boss_loop_rh", 0.3024)
+        boss_reg = (
+            int(gx + gw * rx),
+            int(gy + gh * ry),
+            int(gw * rw),
+            int(gh * rh),
         )
-        # BossClear_2 감지 → 종료 시퀀스
-        if not self.finder.find("BossClear_2", 0.80, bc2_reg):
+        if not self.finder.find("BossClear_2", 0.80, boss_reg):
             return True, False
 
         log.info("🏆 [종료] BossClear_2 감지 → 종료 시퀀스 시작")
