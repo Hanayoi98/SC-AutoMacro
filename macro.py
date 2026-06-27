@@ -982,10 +982,20 @@ class SettingsWindow:
         threading.Thread(target=_wait, daemon=True).start()
 
     def _finish_capture(self, cfg_key, name, x, y):
-        self.cfg[cfg_key] = [x, y]
+        # 절대 좌표 → SC 창 기준 상대 좌표로 변환
+        hwnd = self._find_sc_hwnd()
+        if hwnd:
+            try:
+                wx, wy, _, _ = _sc_get_rect(hwnd)
+                rx, ry = x - wx, y - wy
+            except Exception:
+                rx, ry = x, y
+        else:
+            rx, ry = x, y
+        self.cfg[cfg_key] = [rx, ry]
         if cfg_key in self._coord_sv:
-            self._coord_sv[cfg_key].set(f"({x}, {y})")
-        self._status_sv.set(f"✓ [{name}] 저장: ({x}, {y})")
+            self._coord_sv[cfg_key].set(f"({rx}, {ry})")
+        self._status_sv.set(f"✓ [{name}] 저장: ({rx}, {ry})  [SC창 기준 상대좌표]")
         self.macro.save_config()
         self.win.deiconify()
         self._capturing = False
