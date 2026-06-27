@@ -2199,10 +2199,13 @@ class Macro:
                             self.inp.click(int(key_res[0]), int(key_res[1]))
                             self.inp.rclick(int(tx), int(ty))
                             time.sleep(1.0)
-                        else:
+                            continue
+                        elif not is_auto_sell_set:
                             log.info("🔍 speed3 감지 / 열쇠 없음 → 대기")
                             time.sleep(0.2)
-                        continue
+                            continue
+                        else:
+                            log.info("🔍 speed3 감지 / 열쇠 없음 + MaxBox 도달 → 변환루트")
 
                     elif self.finder.find("speed2", SPEED2_CONF, info_reg):
                         log.info("▶️ speed2(2배속) 감지 → 열쇠 탐색")
@@ -2212,10 +2215,13 @@ class Macro:
                             self.inp.click(int(key_res[0]), int(key_res[1]))
                             self.inp.rclick(int(tx), int(ty))
                             time.sleep(1.0)
-                        else:
+                            continue
+                        elif not is_auto_sell_set:
                             log.info("🔍 speed2 감지 / 열쇠 없음 → 대기")
                             time.sleep(0.2)
-                        continue
+                            continue
+                        else:
+                            log.info("🔍 speed2 감지 / 열쇠 없음 + MaxBox 도달 → 변환루트")
 
                 # ── 변환 초기 클릭 ────────────────────────
                 pyautogui.click(int(gx + gw * 0.6), int(gy + gh * 0.5) - 30)
