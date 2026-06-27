@@ -2343,41 +2343,39 @@ class Macro:
         _f9_timer = [None]
         _f9_long_fired = [False]
 
-        def _on_f9_press(e):
-            if e.name != "f9" or self._f9_held:
+        def _f9_hook(e):
+            if e.name != "f9":
                 return
-            self._f9_held = True
-            self._f9_press_time = time.time()
-            _f9_long_fired[0] = False
+            if e.event_type == "down" and not self._f9_held:
+                self._f9_held = True
+                self._f9_press_time = time.time()
+                _f9_long_fired[0] = False
 
-            def _long_press_action():
-                if not self._f9_held:
-                    return
-                _f9_long_fired[0] = True
-                if self._f9thr and self._f9thr.is_alive():
-                    if self._game_end_mode:
-                        log.info("🔄 [F9 장누름] 게임종료 대기 → 일반 모드")
-                        self._game_end_mode = False
-                        self._boss_select_active = False
-                    else:
-                        log.info("🔄 [F9 장누름] 일반 → 게임종료 대기 모드")
-                        self._game_end_mode = True
+                def _long_press():
+                    if not self._f9_held:
+                        return
+                    _f9_long_fired[0] = True
+                    if self._f9thr and self._f9thr.is_alive():
+                        if self._game_end_mode:
+                            log.info("🔄 [F9 장누름] 게임종료 대기 → 일반 모드")
+                            self._game_end_mode = False
+                            self._boss_select_active = False
+                        else:
+                            log.info("🔄 [F9 장누름] 일반 → 게임종료 대기 모드")
+                            self._game_end_mode = True
 
-            _f9_timer[0] = threading.Timer(4.0, _long_press_action)
-            _f9_timer[0].start()
+                _f9_timer[0] = threading.Timer(4.0, _long_press)
+                _f9_timer[0].start()
 
-        def _on_f9_release(e):
-            if e.name != "f9" or not self._f9_held:
-                return
-            self._f9_held = False
-            if _f9_timer[0]:
-                _f9_timer[0].cancel()
-                _f9_timer[0] = None
-            if not _f9_long_fired[0]:
-                threading.Thread(target=self.f9, daemon=True).start()
+            elif e.event_type == "up" and self._f9_held:
+                self._f9_held = False
+                if _f9_timer[0]:
+                    _f9_timer[0].cancel()
+                    _f9_timer[0] = None
+                if not _f9_long_fired[0]:
+                    threading.Thread(target=self.f9, daemon=True).start()
 
-        keyboard.on_press(_on_f9_press)
-        keyboard.on_release(_on_f9_release)
+        keyboard.hook(_f9_hook)
 
         log.info("단축키 등록 완료.")
 
