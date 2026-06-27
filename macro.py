@@ -1947,8 +1947,15 @@ class Macro:
         log.info("💥 [보스선택] 파티 딜량: %.4f억", party_dps)
 
         # 4. 조건 만족(딜량 > HP) 중 HP 최대값 탐색
+        # 2인은 카오스 클리어 조건 미충족(게임 제한) → 헬(diff_idx=4)까지만 허용
+        max_diff = 4 if player_count <= 2 else 5
+        if player_count <= 2:
+            log.info("👥 [보스선택] 2인 파티 → 카오스 제외, 헬 최대 적용")
+
         best = None  # (hp, boss_idx, diff_idx)
         for (b, d), hp_map in BOSS_HP.items():
+            if d > max_diff:
+                continue
             hp = hp_map.get(player_count)
             if hp is None:
                 continue
