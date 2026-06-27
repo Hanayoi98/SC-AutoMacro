@@ -386,10 +386,29 @@ class Finder:
     images/ 디렉터리의 PNG/BMP/JPG 파일을 이름으로 조회.
     """
 
+    # 템플릿 이미지를 캡처한 기준 창 크기
+    _BASE_W = 1630
+    _BASE_H = 1250
+
     def __init__(self, default_conf: float = 0.85) -> None:
         self._sct   = mss()
-        self._cache: dict[str, np.ndarray] = {}
+        self._cache: dict[str, np.ndarray] = {}         # 원본 템플릿 캐시
+        self._scaled_cache: dict[str, np.ndarray] = {}  # 스케일 적용 캐시
         self._conf  = default_conf
+        self._sx = 1.0
+        self._sy = 1.0
+
+    # ── 스케일 ──────────────────────────────
+    def set_scale(self, current_w: int, current_h: int) -> None:
+        """현재 SC 창 크기 기준 스케일 계산. 창 크기 바뀔 때마다 호출."""
+        sx = current_w / self._BASE_W
+        sy = current_h / self._BASE_H
+        if abs(sx - self._sx) > 0.001 or abs(sy - self._sy) > 0.001:
+            self._sx = sx
+            self._sy = sy
+            self._scaled_cache.clear()
+            log.info("🔍 템플릿 스케일 갱신: %.3f×%.3f (%d×%d → %d×%d)",
+                     sx, sy, self._BASE_W, self._BASE_H, current_w, current_h)
 
     # ── 내부 ──────────────────────────────
     def _load(self, name: str) -> Optional[np.ndarray]:
@@ -404,6 +423,22 @@ class Finder:
                     return img
         log.warning("이미지 없음: images/%s.[png|bmp|jpg]", name)
         return None
+
+    def _get_tmpl(self, name: str) -> Optional[np.ndarray]:
+        """스케일 적용된 템플릿 반환 (1:1이면 원본 그대로)."""
+        if abs(self._sx - 1.0) < 0.001 and abs(self._sy - 1.0) < 0.001:
+            return self._load(name)
+        if name in self._scaled_cache:
+            return self._scaled_cache[name]
+        orig = self._load(name)
+        if orig is None:
+            return None
+        h, w = orig.shape[:2]
+        new_w = max(1, round(w * self._sx))
+        new_h = max(1, round(h * self._sy))
+        scaled = cv2.resize(orig, (new_w, new_h), interpolation=cv2.INTER_AREA)
+        self._scaled_cache[name] = scaled
+        return scaled
 
     def _grab(self, region: Optional[Tuple] = None) -> np.ndarray:
         """region=(left, top, width, height) 또는 None(전체 화면)"""
@@ -428,7 +463,7 @@ class Finder:
         region: Optional[Tuple] = None,
     ) -> Optional[Tuple[int, int]]:
         """미리 캡처된 화면(screen)에서 탐색. 추가 캡처 없음."""
-        tmpl = self._load(name)
+        tmpl = self._get_tmpl(name)
         if tmpl is None:
             return None
         src = screen
@@ -470,7 +505,7 @@ class Finder:
         region: Optional[Tuple] = None,
     ) -> Optional[Tuple[int, int]]:
         """이미지 탐색. 발견 시 중심 좌표 (x, y) 반환, 없으면 None."""
-        tmpl = self._load(name)
+        tmpl = self._get_tmpl(name)
         if tmpl is None:
             return None
         scr    = self._grab(region)
@@ -494,7 +529,7 @@ class Finder:
         region: Optional[Tuple] = None,
     ) -> Optional[Tuple[int, int, int, int]]:
         """이미지 탐색. 발견 시 (left, top, w, h) 반환, 없으면 None."""
-        tmpl = self._load(name)
+        tmpl = self._get_tmpl(name)
         if tmpl is None:
             return None
         scr = self._grab(region)
@@ -517,7 +552,7 @@ class Finder:
         region: Optional[Tuple] = None,
     ) -> float:
         """이미지 최대 매칭 스코어만 반환 (임계값 무관)."""
-        tmpl = self._load(name)
+        tmpl = self._get_tmpl(name)
         if tmpl is None:
             return 0.0
         scr    = self._grab(region)
@@ -1302,6 +1337,7 @@ class Macro:
             time.sleep(0.3)  # 창 조정 후 안정화 대기
         else:
             log.info("창 크기 일치: %d×%d", cw, ch)
+        self.finder.set_scale(tw, th)
 
     # ── 좌표 변환 헬퍼 ───────────────────
     def _abs_region(self, cfg_key: str) -> Optional[Tuple]:
@@ -1778,6 +1814,7 @@ class Macro:
                     time.sleep(1)
                     continue
 
+                self.finder.set_scale(gw, gh)
                 full_reg = (gx, gy, gw, gh)
 
                 # ── 게임종료 모드: BossClear_2 전담 탐색 ──
