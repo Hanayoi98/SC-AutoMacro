@@ -17,3 +17,4 @@ venv/
 build/
 dist/
 *.spec
+setup_installer.py
