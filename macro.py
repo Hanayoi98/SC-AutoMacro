@@ -1319,11 +1319,20 @@ class ConfigUI:
         if self.macro._f9thr and self.macro._f9thr.is_alive():
             if self.macro._game_end_mode and self.macro._f9_held:
                 elapsed = min(4.0, time.time() - self.macro._f9_press_time)
-                self._status_sv.set("게임 종료 대기")
-                self._status_dot.configure(fg="#f9e2af")
+                if self.macro._boss_select_active:
+                    self._status_sv.set("보스선택 모드")
+                    self._status_dot.configure(fg="#cba6f7")
+                else:
+                    self._status_sv.set("게임 종료 대기")
+                    self._status_dot.configure(fg="#f9e2af")
                 self._f9_btn.configure(
                     text=f"■  종료 감지 중  |  F9 {elapsed:.1f}s / 4s",
                     bg=self.C_RED, fg="#1e1e2e", activebackground="#f5a0b0")
+            elif self.macro._game_end_mode and self.macro._boss_select_active:
+                self._status_sv.set("보스선택 모드")
+                self._status_dot.configure(fg="#cba6f7")
+                self._f9_btn.configure(text="■  보스선택 중", bg=self.C_RED, fg="#1e1e2e",
+                                       activebackground="#f5a0b0")
             elif self.macro._game_end_mode:
                 self._status_sv.set("게임 종료 대기")
                 self._status_dot.configure(fg="#f9e2af")
@@ -1451,6 +1460,7 @@ class Macro:
         self._host_stop = threading.Event()
         self._f11thr: Optional[threading.Thread] = None
         self._game_end_mode = False
+        self._boss_select_active = False
         self._f9_press_time = 0.0
         self._f9_held = False
         self._SC_SHOT_DIR   = self._find_sc_shot_dir()
@@ -2039,10 +2049,14 @@ class Macro:
             )
             if self.finder.find("SelectBoss_0", 0.80, boss_reg):
                 log.info("🎮 [종료] SelectBoss_0 감지")
-                if self.cfg.get("gamemode_host_on", False) and self.cfg.get("auto_boss_select_on", False):
-                    log.info("🎯 [보스선택] 방장모드 + 자동보스선택 ON → 보스선택 시작")
-                    self._auto_boss_select(reg)
-                    log.info("🔄 [보스선택] 완료 → 게임종료 모드 전환")
+                if self.cfg.get("gamemode_host_on", False):
+                    self._boss_select_active = True
+                    if self.cfg.get("auto_boss_select_on", False):
+                        log.info("🎯 [보스선택] 방장모드 + 자동보스선택 ON → 보스선택 시작")
+                        self._auto_boss_select(reg)
+                        log.info("🔄 [보스선택] 완료 → 게임종료 모드 전환")
+                    else:
+                        log.info("🎮 [보스선택] 방장모드 ON → 보스선택 모드 전환")
                 else:
                     log.info("🎮 [종료] 게임종료 모드 전환")
                 return True, False
@@ -2110,6 +2124,7 @@ class Macro:
 
         is_auto_sell_set = False
         self._game_end_mode = False
+        self._boss_select_active = False
 
         while not self._stop.is_set():
             try:
