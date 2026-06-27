@@ -862,6 +862,7 @@ class SettingsWindow:
             ("영역 H 비율",  "boss_loop_rh", "num"),
         ]
         self._cfg_rows(f, rows_bloop)
+        self._btn(f, "  드래그로 영역 선택  ", self._start_region_drag).pack(anchor="w", padx=10, pady=(6,2))
 
     # ── 탭 6: 고급1 (딜레이) ─────────────────────
     def _tab_advanced1(self, nb):
@@ -987,6 +988,94 @@ class SettingsWindow:
         self.macro.save_config()
         self.win.deiconify()
         self._capturing = False
+
+    # ── 보스 루프 영역 드래그 선택 ───────────────
+    def _start_region_drag(self):
+        self.win.iconify()
+        self.win.after(300, self._open_drag_overlay)
+
+    def _open_drag_overlay(self):
+        sw = self.win.winfo_screenwidth()
+        sh = self.win.winfo_screenheight()
+
+        ov = tk.Toplevel()
+        ov.attributes("-fullscreen", True)
+        ov.attributes("-topmost", True)
+        ov.attributes("-alpha", 0.25)
+        ov.configure(bg="black")
+        ov.config(cursor="crosshair")
+
+        canvas = tk.Canvas(ov, bg="black", highlightthickness=0)
+        canvas.pack(fill="both", expand=True)
+
+        hint = canvas.create_text(
+            sw // 2, 40,
+            text="드래그하여 보스 루프 영역을 선택하세요  |  ESC: 취소",
+            fill="white", font=("Malgun Gothic", 14, "bold")
+        )
+
+        state = {"x0": 0, "y0": 0, "rect": None}
+
+        def on_press(e):
+            state["x0"], state["y0"] = e.x, e.y
+            if state["rect"]:
+                canvas.delete(state["rect"])
+            state["rect"] = canvas.create_rectangle(
+                e.x, e.y, e.x, e.y,
+                outline="#89b4fa", width=2, fill="#89b4fa", stipple="gray25"
+            )
+
+        def on_drag(e):
+            if state["rect"]:
+                canvas.coords(state["rect"], state["x0"], state["y0"], e.x, e.y)
+
+        def on_release(e):
+            x0, y0 = min(state["x0"], e.x), min(state["y0"], e.y)
+            x1, y1 = max(state["x0"], e.x), max(state["y0"], e.y)
+            ov.destroy()
+            self.win.after(100, lambda: self._finish_region_drag(x0, y0, x1, y1))
+
+        def on_esc(e):
+            ov.destroy()
+            self.win.deiconify()
+
+        canvas.bind("<ButtonPress-1>",   on_press)
+        canvas.bind("<B1-Motion>",       on_drag)
+        canvas.bind("<ButtonRelease-1>", on_release)
+        ov.bind("<Escape>", on_esc)
+        ov.focus_force()
+
+    def _finish_region_drag(self, x0, y0, x1, y1):
+        hwnd = self._find_sc_hwnd()
+        if hwnd:
+            try:
+                gx, gy, gw, gh = _sc_get_rect(hwnd)
+            except Exception:
+                gx, gy = 0, 0
+                gw = self.win.winfo_screenwidth()
+                gh = self.win.winfo_screenheight()
+        else:
+            gx, gy = 0, 0
+            gw = self.win.winfo_screenwidth()
+            gh = self.win.winfo_screenheight()
+
+        rx = round((x0 - gx) / gw, 4)
+        ry = round((y0 - gy) / gh, 4)
+        rw = round((x1 - x0)  / gw, 4)
+        rh = round((y1 - y0)  / gh, 4)
+
+        for key, val in [("boss_loop_rx", rx), ("boss_loop_ry", ry),
+                         ("boss_loop_rw", rw), ("boss_loop_rh", rh)]:
+            self.cfg[key] = val
+            sv_entry = self._sv_map.get(key)
+            if sv_entry:
+                sv_entry[1].set(str(val))
+
+        self.macro.save_config()
+        self.win.deiconify()
+        messagebox.showinfo("영역 저장",
+            f"보스 루프 영역 저장 완료\n"
+            f"X: {rx}  Y: {ry}\nW: {rw}  H: {rh}", parent=self.win)
 
     # ── 위젯 헬퍼 ────────────────────────────────
     def _frame(self, parent):
