@@ -2202,9 +2202,7 @@ class Macro:
                                 time.sleep(1.0)
                                 continue
                             else:
-                                log.info("🔍 speed3 감지 / 열쇠 없음 → 대기")
-                                time.sleep(0.2)
-                                continue
+                                log.info("🔍 speed3 감지 / 열쇠 없음 → 변환루트")
                         else:
                             log.info("⏩ speed3 감지 / MaxBox 도달 → 변환루트")
 
@@ -2219,9 +2217,7 @@ class Macro:
                                 time.sleep(1.0)
                                 continue
                             else:
-                                log.info("🔍 speed2 감지 / 열쇠 없음 → 대기")
-                                time.sleep(0.2)
-                                continue
+                                log.info("🔍 speed2 감지 / 열쇠 없음 → 변환루트")
                         else:
                             log.info("▶️ speed2 감지 / MaxBox 도달 → 변환루트")
 
