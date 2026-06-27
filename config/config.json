@@ -59,5 +59,10 @@
   "speed_confidence": 0.88,
   "gamemode_host_on": false,
   "host_username": "Hanayoi,RyuHa-,Cho'A",
-  "game_end_on": true
+  "game_end_on": true,
+  "auto_boss_select_on": false,
+  "boss_loop_rx": 0.2677,
+  "boss_loop_ry": 0.2494,
+  "boss_loop_rw": 0.4553,
+  "boss_loop_rh": 0.3024
 }
