@@ -1931,6 +1931,7 @@ class Macro:
         L(도전)은 누르지 않음 — 수동 입력 대기.
         비활성 상태(auto_boss_select_on=False)에서는 호출되지 않음.
         """
+        import re
         BOSS_HP = {
             # (boss_idx, diff_idx): {인원수: HP(억)}
             # 헬 (W×4)
