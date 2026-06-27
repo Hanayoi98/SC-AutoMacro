@@ -1870,9 +1870,13 @@ class Macro:
                 int(gh * 0.4267),
             )
             if self.finder.find("SelectBoss_0", 0.80, sb1_reg):
-                log.info("🎮 [종료] SelectBoss_1 감지 → 게임종료 루프 활성화")
-                if self.cfg.get("auto_boss_select_on", False):
+                log.info("🎮 [종료] SelectBoss_0 감지")
+                if self.cfg.get("gamemode_host_on", False) and self.cfg.get("auto_boss_select_on", False):
+                    log.info("🎯 [보스선택] 방장모드 + 자동보스선택 ON → 보스선택 시작")
                     self._auto_boss_select(reg)
+                    log.info("🔄 [보스선택] 완료 → 게임종료 모드 전환")
+                else:
+                    log.info("🎮 [종료] 게임종료 모드 전환")
                 return True, False
             return False, False
 
