@@ -2003,27 +2003,36 @@ class Macro:
         log.info("🏆 [보스선택] 선택: %s %s (HP %.2f억)",
                  DIFF_NAMES[diff_idx], BOSS_NAMES[boss_idx], hp_val)
 
-        # 5. SC 창 강제 포그라운드 전환 (AttachThreadInput 트릭) 후 키 입력
+        # 5. SC 창 감지 + PostMessage 키입력 헬퍼
+        _WM_KEYDOWN = 0x0100
+        _WM_KEYUP   = 0x0101
+        _VK = {
+            'w': 0x57, 's': 0x53, 'a': 0x41, 'd': 0x44,
+            'l': 0x4C, 'e': 0x45, 'q': 0x51,
+        }
+
         hwnd = _sc_find_hwnd()
-        if hwnd:
-            cur = _u32.GetForegroundWindow()
-            cur_tid = _u32.GetWindowThreadProcessId(cur, None)
-            tgt_tid = _u32.GetWindowThreadProcessId(hwnd, None)
-            _u32.AttachThreadInput(cur_tid, tgt_tid, True)
-            _u32.SetForegroundWindow(hwnd)
-            _u32.BringWindowToTop(hwnd)
-            _u32.AttachThreadInput(cur_tid, tgt_tid, False)
-            time.sleep(0.3)
+        log.info("🖥️ [보스선택] SC hwnd: %s", hwnd)
+
+        def _post_key(key: str, delay: float = 0.5):
+            vk = _VK.get(key.lower())
+            if vk and hwnd:
+                _u32.PostMessageW(hwnd, _WM_KEYDOWN, vk, 0)
+                time.sleep(0.05)
+                _u32.PostMessageW(hwnd, _WM_KEYUP, vk, 0)
+                time.sleep(delay)
+            else:
+                self.inp.press(key, delay)
 
         # 6. 보스 이동 (S × boss_idx)
         for i in range(boss_idx):
             log.info("➡️ [보스선택] S (%d/%d)", i + 1, boss_idx)
-            self.inp.press("s", 0.5)
+            _post_key("s", 0.5)
 
         # 7. 난이도 설정 (W × diff_idx)
         for i in range(diff_idx):
             log.info("⬆️ [보스선택] W (%d/%d)", i + 1, diff_idx)
-            self.inp.press("w", 0.5)
+            _post_key("w", 0.5)
 
         log.info("✅ [보스선택] 완료 → %s %s 대기 (L은 수동 입력)",
                  DIFF_NAMES[diff_idx], BOSS_NAMES[boss_idx])
