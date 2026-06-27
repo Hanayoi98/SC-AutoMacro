@@ -790,6 +790,17 @@ class SettingsWindow:
         for lbl,w,h in self.SC_PRESETS:
             self._btn(pr, lbl, (lambda ww=w,hh=h: (self._w_var.set(str(ww)), self._h_var.set(str(hh)), self._apply_size()))).pack(side="left", padx=2)
 
+        tk.Frame(f, height=1, bg=self.C_BG3).pack(fill="x", padx=10, pady=(10,4))
+        self._lbl(f, "[ 보스 루프 영역 (비율 0.0~1.0) ]", bold=True, fg=self.C_ACC).pack(anchor="w", pady=(4,2), padx=10)
+        rows_bloop = [
+            ("영역 X 비율",  "boss_loop_rx", "num"),
+            ("영역 Y 비율",  "boss_loop_ry", "num"),
+            ("영역 W 비율",  "boss_loop_rw", "num"),
+            ("영역 H 비율",  "boss_loop_rh", "num"),
+        ]
+        self._cfg_rows(f, rows_bloop)
+        self._btn(f, "  드래그로 영역 선택  ", self._start_region_drag).pack(anchor="w", padx=10, pady=(6,2))
+
     # ── 탭 2: 좌표 ───────────────────────────────
     def _tab_coords(self, nb):
         f = self._frame(nb); nb.add(f, text=" 좌표 설정 ")
@@ -853,16 +864,6 @@ class SettingsWindow:
         ]
         self._cfg_rows(f, rows_boss)
 
-        tk.Frame(f, height=1, bg=self.C_BG3).pack(fill="x", padx=10, pady=(10,4))
-        self._lbl(f, "[ 보스 루프 영역 (비율 0.0~1.0) ]", bold=True, fg=self.C_ACC).pack(anchor="w", pady=(4,2), padx=10)
-        rows_bloop = [
-            ("영역 X 비율",  "boss_loop_rx", "num"),
-            ("영역 Y 비율",  "boss_loop_ry", "num"),
-            ("영역 W 비율",  "boss_loop_rw", "num"),
-            ("영역 H 비율",  "boss_loop_rh", "num"),
-        ]
-        self._cfg_rows(f, rows_bloop)
-        self._btn(f, "  드래그로 영역 선택  ", self._start_region_drag).pack(anchor="w", padx=10, pady=(6,2))
 
     # ── 탭 6: 고급1 (딜레이) ─────────────────────
     def _tab_advanced1(self, nb):
