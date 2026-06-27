@@ -193,8 +193,6 @@ DEFAULT_CONFIG: dict = {
     "f9_box28_monitor_on": True,
     "max_box":              28,
     "f9_early_branch_on":  True,
-    "check_on_offset_x":   1324,
-    "check_on_offset_y":   1056,
     "check_on_offset":     [1324, 1056],
     # ── 미확인 좌표 (직접 측정 후 입력) ──
     "coord_a":         [0, 0],
@@ -232,8 +230,6 @@ _NUM_KEYS = {
     "f9_pet_interval":     int,
     "max_box":             int,
     "box28_confidence_set": float,
-    "check_on_offset_x":   int,
-    "check_on_offset_y":   int,
     "search_confidence":   float,
     "count_confidence":    float,
     "speed_confidence":    float,
@@ -2154,11 +2150,7 @@ class Macro:
                         log.info("⌨️ [자동판매] '3' 키 입력")
                         self.inp.press("3")
                         time.sleep(0.5)
-                        _off = self.cfg.get("check_on_offset", [0, 0])
-                        if _off and (_off[0] != 0 or _off[1] != 0):
-                            cx, cy = self._abs_coord("check_on_offset")
-                        else:
-                            cx, cy = self._abs_xy("check_on_offset_x", "check_on_offset_y")
+                        cx, cy = self._abs_coord("check_on_offset")
                         pyautogui.moveTo(cx, cy)
                         time.sleep(0.4)
                         if self.finder.find("on", ON_CONF, cmd_reg):
