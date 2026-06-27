@@ -1889,8 +1889,24 @@ class Macro:
             만_val = float(m만.group(1).replace(',', '')) / 10000.0 if m만 else 0.0
             return 억_val + 만_val
 
+        # 1.5차: 억 미인식 + 만 인식 시 — 억 오인식 digit 제거 후 재조합
+        # 예: "119억 6984만" → OCR "1194 6984 만" → n1=1194(마지막 digit=억 오인식), n2=6984
+        if m만:
+            만_val = float(m만.group(1).replace(',', '')) / 10000.0
+            before_만 = text[:m만.start()]
+            n1_list = [int(n.replace(',', '')) for n in re.findall(r'[\d,]+', before_만) if n.replace(',', '')]
+            if n1_list:
+                raw = n1_list[-1]
+                raw_str = str(raw)
+                if len(raw_str) > 1:
+                    trimmed = int(raw_str[:-1])   # 마지막 오인식 digit 제거
+                    if 1 <= trimmed <= 9999:
+                        log.info("📋 [보스선택] 억 오인식 보정: %d → %d억", raw, trimmed)
+                        return float(trimmed) + 만_val
+                if 1 <= raw <= 9999:
+                    return float(raw) + 만_val
+
         # 2차: 한글 OCR 실패 시 — 콜론 뒤 숫자만 추출
-        # 예: 'AF ILE) 2 Get: 7980 Bageut fo' → ':' 뒤 숫자 [7980]
         after_colon = re.split(r':', text)[-1]
         nums = [int(n.replace(',', '')) for n in re.findall(r'[\d,]+', after_colon) if n.replace(',', '')]
         if not nums:
@@ -1898,14 +1914,13 @@ class Macro:
 
         if len(nums) >= 2:
             n1, n2 = nums[0], nums[1]
-            # 두 수가 '억 만' 형태로 분리된 경우
             if 1 <= n1 <= 99999 and 0 <= n2 <= 9999:
                 return n1 + n2 / 10000.0
         if len(nums) >= 1:
             n = nums[0]
-            if 1 <= n <= 99999:          # 억 단위로 해석
+            if 1 <= n <= 99999:
                 return float(n)
-            if 10000 < n <= 999999999:   # 만 단위로 해석 (예: 79803100만)
+            if 10000 < n <= 999999999:
                 return n / 10000.0
 
         return 0.0
@@ -1955,10 +1970,10 @@ class Macro:
         shot = pyautogui.screenshot(region=(ocr_x, ocr_y, ocr_w, ocr_h))
         img = cv2.cvtColor(np.array(shot), cv2.COLOR_RGB2GRAY)
         _, img = cv2.threshold(img, 0, 255, cv2.THRESH_BINARY | cv2.THRESH_OTSU)
-        img = cv2.resize(img, (ocr_w * 2, ocr_h * 2), interpolation=cv2.INTER_CUBIC)
+        img = cv2.resize(img, (ocr_w * 3, ocr_h * 3), interpolation=cv2.INTER_CUBIC)
         try:
             ocr_text = pytesseract.image_to_string(
-                _PILImage.fromarray(img), lang="kor+eng", config="--psm 7"
+                _PILImage.fromarray(img), lang="kor+eng", config="--oem 3 --psm 7"
             ).strip()
         except Exception:
             ocr_text = pytesseract.image_to_string(
