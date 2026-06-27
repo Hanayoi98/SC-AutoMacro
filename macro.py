@@ -191,6 +191,7 @@ DEFAULT_CONFIG: dict = {
     "f9_pet_upgrade":      "e3",
     "box28_confidence_set": 0.97,
     "f9_box28_monitor_on": True,
+    "max_box":              28,
     "f9_early_branch_on":  True,
     "check_on_offset_x":   1324,
     "check_on_offset_y":   1056,
@@ -224,6 +225,7 @@ DEFAULT_CONFIG: dict = {
 # 문자열로 저장될 수 있는 숫자 키 목록
 _NUM_KEYS = {
     "f9_pet_interval":     int,
+    "max_box":             int,
     "box28_confidence_set": float,
     "check_on_offset_x":   int,
     "check_on_offset_y":   int,
@@ -722,7 +724,7 @@ class SettingsWindow:
         ("B",   "coord_b",          "F7 마우스 B  (더블클릭)"),
         ("C",   "coord_c",          "F7 마우스 C  (싱글클릭 ×4)"),
         ("M",   "myth_text_coord",  "변환 루트  myth_text 클릭"),
-        ("ON",  "check_on_offset",  "28box  ON/OFF 확인 좌표"),
+        ("ON",  "check_on_offset",  "Max Box  ON/OFF 확인 좌표"),
     ]
     SC_PRESETS = [("640×480",640,480),("800×600",800,600),("1024×768",1024,768)]
 
@@ -817,7 +819,8 @@ class SettingsWindow:
         rows = [
             ("펫 업그레이드 키",    "f9_pet_upgrade",      "str"),
             ("펫 업그레이드 주기(초)","f9_pet_interval",   "num"),
-            ("28box 감시",          "f9_box28_monitor_on", "bool"),
+            ("Max Box 감시",        "f9_box28_monitor_on", "bool"),
+            ("Max Box 번호",        "max_box",             "num"),
         ]
         self._cfg_rows(f, rows)
 
@@ -1851,6 +1854,7 @@ class Macro:
                 cmd_reg   = (int(gx + gw*0.65), int(gy + gh*0.65), int(gw*0.35), int(gh*0.35))
                 field_reg = (gx + 50, gy + 50, gw - 100, gh - 250)
                 b28_conf  = self.cfg.get("box28_confidence_set", 0.93)
+                max_box   = int(self.cfg.get("max_box", 28))
 
                 # ── 게임종료 루프 (SelectBoss_0 감지) ─────
                 if self.cfg.get("game_end_on", False):
@@ -1860,10 +1864,10 @@ class Macro:
                         self._game_end_mode = True
                         continue
 
-                # ── 28box 자동 판매 설정 ──────────────────
+                # ── Max Box 자동 판매 설정 ───────────────
                 if self.cfg.get("f9_box28_monitor_on", True) and not is_auto_sell_set:
-                    if self.finder.find("28box", b28_conf, box_reg):
-                        log.info("📦 [28상자 발견] 자동 판매 설정 시작")
+                    if self.finder.find(f"{max_box}box", b28_conf, box_reg):
+                        log.info("📦 [%d상자 발견] 자동 판매 설정 시작", max_box)
                         log.info("⌨️ [자동판매] '3' 키 입력")
                         self.inp.press("3")
                         time.sleep(0.5)
