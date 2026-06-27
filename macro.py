@@ -246,6 +246,11 @@ _NUM_KEYS = {
     "f7_input_delay":      float,
     "f7_step_delay":       float,
     "f7_mouse_move_dur":   float,
+    "boss_loop_rx":        float,
+    "boss_loop_ry":        float,
+    "boss_loop_rw":        float,
+    "boss_loop_rh":        float,
+    "host_confidence":     float,
 }
 
 def _coerce_types(cfg: dict) -> dict:
