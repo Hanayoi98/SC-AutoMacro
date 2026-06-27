@@ -106,7 +106,11 @@ from mss import mss
 import pytesseract
 from PIL import Image as _PILImage
 
-pytesseract.pytesseract.tesseract_cmd = r"C:\Program Files\Tesseract-OCR\tesseract.exe"
+for _tp in [r"C:\Program Files\Tesseract-OCR\tesseract.exe",
+             r"C:\Program Files (x86)\Tesseract-OCR\tesseract.exe"]:
+    if os.path.exists(_tp):
+        pytesseract.pytesseract.tesseract_cmd = _tp
+        break
 
 try:
     import win32gui
@@ -124,8 +128,13 @@ import tkinter.ttk as ttk
 # 작업 디렉터리 고정
 # ──────────────────────────────────────────────────────────
 # 관리자 권한 실행 시 CWD 가 C:\Windows\System32 로 바뀌는 문제 방지.
-# macro.py 가 있는 폴더를 기준 경로로 항상 고정한다.
-_BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+# exe 패키징(PyInstaller) 시 리소스는 _MEIPASS, 유저 데이터는 exe 옆 폴더 사용.
+if getattr(sys, "frozen", False):
+    _BASE_DIR = os.path.dirname(sys.executable)   # config, log → exe 옆
+    _RES_DIR  = sys._MEIPASS                       # images → 번들 내부
+else:
+    _BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+    _RES_DIR  = _BASE_DIR
 os.chdir(_BASE_DIR)
 
 # ──────────────────────────────────────────────────────────
@@ -165,7 +174,7 @@ log.addHandler(_qh)
 # 설정
 # ──────────────────────────────────────────────────────────
 CONFIG_PATH = os.path.join(_BASE_DIR, "config", "config.json")
-IMAGES_DIR  = os.path.join(_BASE_DIR, "images")
+IMAGES_DIR  = os.path.join(_RES_DIR,  "images")
 SC_TITLES = [
     "starcraft",      # StarCraft, StarCraft: Remastered, StarCraft: Brood War
     "brood war",      # Brood War (단독 창 제목)
@@ -251,6 +260,7 @@ def load_config() -> dict:
         _coerce_types(cfg)          # 문자열 숫자 → 실제 숫자
         log.info("설정 로드: %s", CONFIG_PATH)
         return cfg
+    os.makedirs(os.path.dirname(CONFIG_PATH), exist_ok=True)
     with open(CONFIG_PATH, "w", encoding="utf-8") as f:
         json.dump(DEFAULT_CONFIG, f, indent=2, ensure_ascii=False)
     log.info("기본 config.json 생성 완료 - 좌표 등을 직접 입력하세요")
