@@ -212,9 +212,10 @@ DEFAULT_CONFIG: dict = {
     "key_speed_delay":   1.0,
     "window_size":       [0, 0],
     # ── 게임모드 ──
-    "gamemode_host_on":  False,
-    "host_username":     "Hanayoi",
-    "game_end_on":       False,
+    "gamemode_host_on":       False,
+    "host_username":          "Hanayoi",
+    "game_end_on":            False,
+    "auto_boss_select_on":    False,
     # ── F7 전용 딜레이 ──
     "f7_input_delay":    0.15,
     "f7_step_delay":     0.2,
@@ -840,6 +841,13 @@ class SettingsWindow:
             ("게임종료 루프 사용", "game_end_on", "bool"),
         ]
         self._cfg_rows(f, rows_end)
+
+        tk.Frame(f, height=1, bg=self.C_BG3).pack(fill="x", padx=10, pady=(10,4))
+        self._lbl(f, "[ 자동 보스 선택 ]", bold=True, fg=self.C_ACC).pack(anchor="w", pady=(4,2), padx=10)
+        rows_boss = [
+            ("자동 보스 선택 사용", "auto_boss_select_on", "bool"),
+        ]
+        self._cfg_rows(f, rows_boss)
 
     # ── 탭 6: 고급1 (딜레이) ─────────────────────
     def _tab_advanced1(self, nb):
@@ -1731,6 +1739,118 @@ class Macro:
 
     _SC_SHOT_DIR: str = ""   # 런타임에 _find_sc_shot_dir()로 초기화
 
+    # ─────────────────────────────────────
+    # 자동 보스 선택
+    # ─────────────────────────────────────
+    @staticmethod
+    def _parse_dps_억(text: str) -> float:
+        import re
+        m억 = re.search(r'([\d,]+)\s*억', text)
+        m만 = re.search(r'([\d,]+)\s*만', text)
+        억_val = float(m억.group(1).replace(',', '')) if m억 else 0.0
+        만_val = float(m만.group(1).replace(',', '')) / 10000.0 if m만 else 0.0
+        return 억_val + 만_val
+
+    def _auto_boss_select(self, reg) -> None:
+        """
+        보스 선택 화면 진입 시 파티 딜량 OCR → 최적 보스+난이도로 자동 이동.
+        L(도전)은 누르지 않음 — 수동 입력 대기.
+        비활성 상태(auto_boss_select_on=False)에서는 호출되지 않음.
+        """
+        BOSS_HP = {
+            # (boss_idx, diff_idx): {인원수: HP(억)}
+            # 헬 (W×4)
+            (0, 4): {6: 100.0,   5: 83.4,   4: 66.8,   3: 50.2,   2: 33.6},
+            (1, 4): {6: 115.0,   5: 95.91,  4: 76.82,  3: 57.73,  2: 38.64},
+            (2, 4): {6: 130.0,   5: 108.42, 4: 86.84,  3: 65.26,  2: 43.68},
+            (3, 4): {6: 145.0,   5: 120.93, 4: 96.86,  3: 72.79,  2: 48.72},
+            (4, 4): {6: 165.0,   5: 137.61, 4: 110.22, 3: 82.83,  2: 55.44},
+            # 카오스 (W×5)
+            (0, 5): {6: 200.0,   5: 166.8,  4: 133.6,  3: 100.4},
+            (1, 5): {6: 240.0,   5: 200.16, 4: 160.32, 3: 120.48},
+            (2, 5): {6: 285.0,   5: 237.69, 4: 190.38, 3: 143.07},
+            (3, 5): {6: 335.0,   5: 279.39, 4: 223.78, 3: 168.17},
+            (4, 5): {6: 400.0,   5: 333.6,  4: 267.2,  3: 200.8},
+        }
+        BOSS_NAMES = ["알카", "이터", "크라", "노바", "엔드"]
+        DIFF_NAMES = ["이지", "노말", "하드", "익스", "헬", "카오스"]
+
+        # 1. 인원 수 (host_username 쉼표 split)
+        usernames = [u.strip() for u in self.cfg.get("host_username", "").split(",") if u.strip()]
+        player_count = max(1, len(usernames))
+        log.info("🎯 [보스선택] 인원 수: %d인", player_count)
+
+        # 2. SelectBoss_0 위치 확인
+        sb0 = self.finder.find("SelectBoss_0", 0.75, reg)
+        if sb0 is None:
+            log.warning("⚠️ [보스선택] SelectBoss_0 미감지 → 중단")
+            return
+
+        # 3. 파티 딜량 OCR (SelectBoss_0 행 전체)
+        gx, gy, gw, gh = reg
+        ocr_x = max(0, int(gx + gw * 0.20))
+        ocr_y = max(0, int(sb0[1]) - 18)
+        ocr_w = int(gw * 0.60)
+        ocr_h = 36
+        shot = pyautogui.screenshot(region=(ocr_x, ocr_y, ocr_w, ocr_h))
+        img = cv2.cvtColor(np.array(shot), cv2.COLOR_RGB2GRAY)
+        _, img = cv2.threshold(img, 100, 255, cv2.THRESH_BINARY)
+        img = cv2.resize(img, (ocr_w * 2, ocr_h * 2), interpolation=cv2.INTER_CUBIC)
+        try:
+            ocr_text = pytesseract.image_to_string(
+                _PILImage.fromarray(img), lang="kor+eng", config="--psm 7"
+            ).strip()
+        except Exception:
+            ocr_text = pytesseract.image_to_string(
+                _PILImage.fromarray(img), config="--psm 7"
+            ).strip()
+        log.info("📋 [보스선택] 딜량 OCR: %r", ocr_text)
+
+        party_dps = self._parse_dps_억(ocr_text)
+        if party_dps <= 0:
+            log.warning("⚠️ [보스선택] 딜량 파싱 실패 (%r) → 중단", ocr_text)
+            return
+        log.info("💥 [보스선택] 파티 딜량: %.4f억", party_dps)
+
+        # 4. 조건 만족(딜량 > HP) 중 HP 최대값 탐색
+        best = None  # (hp, boss_idx, diff_idx)
+        for (b, d), hp_map in BOSS_HP.items():
+            hp = hp_map.get(player_count)
+            if hp is None:
+                continue
+            if party_dps > hp:
+                if best is None or hp > best[0]:
+                    best = (hp, b, d)
+
+        if best is None:
+            log.warning("⚠️ [보스선택] 조건 만족 보스 없음 (딜량: %.2f억) → 중단", party_dps)
+            return
+
+        hp_val, boss_idx, diff_idx = best
+        log.info("🏆 [보스선택] 선택: %s %s (HP %.2f억)",
+                 DIFF_NAMES[diff_idx], BOSS_NAMES[boss_idx], hp_val)
+
+        # 5. 이지알카 초기화 (A×10 + Q×10)
+        log.info("🔄 [보스선택] 이지알카 초기화")
+        for _ in range(10):
+            self.inp.press("a", 0.12)
+        for _ in range(10):
+            self.inp.press("q", 0.12)
+        time.sleep(0.5)
+
+        # 6. 보스 이동 (S × boss_idx) — 보스 이동 시 난이도 이지로 초기화됨
+        for i in range(boss_idx):
+            log.info("➡️ [보스선택] S (%d/%d)", i + 1, boss_idx)
+            self.inp.press("s", 0.3)
+
+        # 7. 난이도 설정 (W × diff_idx)
+        for i in range(diff_idx):
+            log.info("⬆️ [보스선택] W (%d/%d)", i + 1, diff_idx)
+            self.inp.press("w", 0.3)
+
+        log.info("✅ [보스선택] 완료 → %s %s 대기 (L은 수동 입력)",
+                 DIFF_NAMES[diff_idx], BOSS_NAMES[boss_idx])
+
     def _game_end_check(self, reg, is_active: bool) -> tuple:
         """
         게임종료 루프.
@@ -1751,6 +1871,8 @@ class Macro:
             )
             if self.finder.find("SelectBoss_0", 0.80, sb1_reg):
                 log.info("🎮 [종료] SelectBoss_1 감지 → 게임종료 루프 활성화")
+                if self.cfg.get("auto_boss_select_on", False):
+                    self._auto_boss_select(reg)
                 return True, False
             return False, False
 
