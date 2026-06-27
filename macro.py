@@ -2164,15 +2164,10 @@ class Macro:
                         pyautogui.moveTo(cx, cy)
                         time.sleep(0.4)
                         if self.finder.find("on", ON_CONF, cmd_reg):
-                            log.info("✅ [자동판매] 이미 ON 상태 → 설정 완료")
+                            log.info("✅ [자동판매] ON 확인 → 설정 완료")
                         else:
-                            log.info("🖱️ [자동판매] ON 꺼짐 → 좌클릭으로 ON 설정")
-                            pyautogui.click(cx, cy)
-                            time.sleep(0.3)
-                            if self.finder.find("on", ON_CONF, cmd_reg):
-                                log.info("✅ [자동판매] ON 켜짐 확인 → 설정 완료")
-                            else:
-                                log.warning("⚠️ [자동판매] ON 켜짐 미확인")
+                            log.info("⌨️ [자동판매] ON 미감지 → A키 입력")
+                            self.inp.press("a")
                         is_auto_sell_set = True
                         time.sleep(0.5)
                         continue
