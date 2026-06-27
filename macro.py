@@ -1,15 +1,15 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-StarCraft Auto Macro v1.0
+StarCraft Auto Macro v1.3
 이미지 인식 기반 스타크래프트 자동화 매크로
 
 단축키
-  F6       : 채팅 매크로 + 식별코드 입력 (→ f9_early_branch_on 시 F7 자동 실행)
-  F7       : key 이미지 대기 후 업그레이드/마우스 루틴
-  F8       : @태초 채팅 전송
-  F9       : 메인 루프 시작/정지 (토글)
-  Ctrl+F11 : 설정 창 열기/닫기
+  F6  : 채팅 매크로 + 식별코드 입력 (→ f9_early_branch_on 시 F7 자동 실행)
+  F7  : autosetting 대기 후 업그레이드/마우스 루틴
+  F8  : @태초 채팅 전송
+  F9  : 메인 루프 시작/정지 (토글)
+  F11 : 방장모드 시작/정지 (토글)
   Ctrl+F12 : 매크로 종료
 """
 
@@ -21,6 +21,7 @@ import logging
 import threading
 import subprocess
 import queue
+import difflib
 from typing import List, Optional, Tuple
 
 # ──────────────────────────────────────────────────────────
@@ -40,6 +41,8 @@ _REQUIRED_PACKAGES = [
     ("pyautogui",    "pyautogui"),
     ("pyperclip",    "pyperclip"),
     ("mss",          "mss"),
+    ("pytesseract",  "pytesseract"),
+    ("PIL",          "Pillow"),
 ]
 
 
@@ -100,6 +103,14 @@ import keyboard
 import pyautogui
 import pyperclip
 from mss import mss
+import pytesseract
+from PIL import Image as _PILImage
+
+for _tp in [r"C:\Program Files\Tesseract-OCR\tesseract.exe",
+             r"C:\Program Files (x86)\Tesseract-OCR\tesseract.exe"]:
+    if os.path.exists(_tp):
+        pytesseract.pytesseract.tesseract_cmd = _tp
+        break
 
 try:
     import win32gui
@@ -117,8 +128,13 @@ import tkinter.ttk as ttk
 # 작업 디렉터리 고정
 # ──────────────────────────────────────────────────────────
 # 관리자 권한 실행 시 CWD 가 C:\Windows\System32 로 바뀌는 문제 방지.
-# macro.py 가 있는 폴더를 기준 경로로 항상 고정한다.
-_BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+# exe 패키징(PyInstaller) 시 리소스는 _MEIPASS, 유저 데이터는 exe 옆 폴더 사용.
+if getattr(sys, "frozen", False):
+    _BASE_DIR = os.path.dirname(sys.executable)   # config, log → exe 옆
+    _RES_DIR  = sys._MEIPASS                       # images → 번들 내부
+else:
+    _BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+    _RES_DIR  = _BASE_DIR
 os.chdir(_BASE_DIR)
 
 # ──────────────────────────────────────────────────────────
@@ -157,8 +173,8 @@ log.addHandler(_qh)
 # ──────────────────────────────────────────────────────────
 # 설정
 # ──────────────────────────────────────────────────────────
-CONFIG_PATH = os.path.join(_BASE_DIR, "config.json")
-IMAGES_DIR  = os.path.join(_BASE_DIR, "images")
+CONFIG_PATH = os.path.join(_BASE_DIR, "config", "config.json")
+IMAGES_DIR  = os.path.join(_RES_DIR,  "images")
 SC_TITLES = [
     "starcraft",      # StarCraft, StarCraft: Remastered, StarCraft: Brood War
     "brood war",      # Brood War (단독 창 제목)
@@ -175,6 +191,7 @@ DEFAULT_CONFIG: dict = {
     "f9_pet_upgrade":      "e3",
     "box28_confidence_set": 0.97,
     "f9_box28_monitor_on": True,
+    "max_box":              28,
     "f9_early_branch_on":  True,
     "check_on_offset_x":   1324,
     "check_on_offset_y":   1056,
@@ -184,29 +201,45 @@ DEFAULT_CONFIG: dict = {
     "coord_b":         [0, 0],
     "coord_c":         [0, 0],
     "myth_text_coord": [0, 0],
-    # ── 탐색 · 입력 튜닝 ──
+    # ── 탐색 · 입력 튜닝 (F9 루프) ──
     "search_confidence": 0.85,
+    "count_confidence":  0.85,
+    "speed_confidence":  0.85,
     "input_delay":       0.5,
     "loop_delay":        0.5,
     "mouse_move_dur":    0.5,
     "step_delay":        0.2,
     "key_speed_delay":   1.0,
     "window_size":       [0, 0],
+    # ── 게임모드 ──
+    "gamemode_host_on":  False,
+    "host_username":     "Hanayoi",
+    "game_end_on":       False,
+    # ── F7 전용 딜레이 ──
+    "f7_input_delay":    0.15,
+    "f7_step_delay":     0.2,
+    "f7_mouse_move_dur": 0.05,
 }
 
 
 # 문자열로 저장될 수 있는 숫자 키 목록
 _NUM_KEYS = {
     "f9_pet_interval":     int,
+    "max_box":             int,
     "box28_confidence_set": float,
     "check_on_offset_x":   int,
     "check_on_offset_y":   int,
     "search_confidence":   float,
+    "count_confidence":    float,
+    "speed_confidence":    float,
     "input_delay":         float,
     "loop_delay":          float,
     "mouse_move_dur":      float,
     "step_delay":          float,
     "key_speed_delay":     float,
+    "f7_input_delay":      float,
+    "f7_step_delay":       float,
+    "f7_mouse_move_dur":   float,
 }
 
 def _coerce_types(cfg: dict) -> dict:
@@ -229,6 +262,7 @@ def load_config() -> dict:
         _coerce_types(cfg)          # 문자열 숫자 → 실제 숫자
         log.info("설정 로드: %s", CONFIG_PATH)
         return cfg
+    os.makedirs(os.path.dirname(CONFIG_PATH), exist_ok=True)
     with open(CONFIG_PATH, "w", encoding="utf-8") as f:
         json.dump(DEFAULT_CONFIG, f, indent=2, ensure_ascii=False)
     log.info("기본 config.json 생성 완료 - 좌표 등을 직접 입력하세요")
@@ -364,10 +398,29 @@ class Finder:
     images/ 디렉터리의 PNG/BMP/JPG 파일을 이름으로 조회.
     """
 
+    # 템플릿 이미지를 캡처한 기준 창 크기
+    _BASE_W = 1630
+    _BASE_H = 1250
+
     def __init__(self, default_conf: float = 0.85) -> None:
         self._sct   = mss()
-        self._cache: dict[str, np.ndarray] = {}
+        self._cache: dict[str, np.ndarray] = {}         # 원본 템플릿 캐시
+        self._scaled_cache: dict[str, np.ndarray] = {}  # 스케일 적용 캐시
         self._conf  = default_conf
+        self._sx = 1.0
+        self._sy = 1.0
+
+    # ── 스케일 ──────────────────────────────
+    def set_scale(self, current_w: int, current_h: int) -> None:
+        """현재 SC 창 크기 기준 스케일 계산. 창 크기 바뀔 때마다 호출."""
+        sx = current_w / self._BASE_W
+        sy = current_h / self._BASE_H
+        if abs(sx - self._sx) > 0.001 or abs(sy - self._sy) > 0.001:
+            self._sx = sx
+            self._sy = sy
+            self._scaled_cache.clear()
+            log.info("🔍 템플릿 스케일 갱신: %.3f×%.3f (%d×%d → %d×%d)",
+                     sx, sy, self._BASE_W, self._BASE_H, current_w, current_h)
 
     # ── 내부 ──────────────────────────────
     def _load(self, name: str) -> Optional[np.ndarray]:
@@ -382,6 +435,22 @@ class Finder:
                     return img
         log.warning("이미지 없음: images/%s.[png|bmp|jpg]", name)
         return None
+
+    def _get_tmpl(self, name: str) -> Optional[np.ndarray]:
+        """스케일 적용된 템플릿 반환 (1:1이면 원본 그대로)."""
+        if abs(self._sx - 1.0) < 0.001 and abs(self._sy - 1.0) < 0.001:
+            return self._load(name)
+        if name in self._scaled_cache:
+            return self._scaled_cache[name]
+        orig = self._load(name)
+        if orig is None:
+            return None
+        h, w = orig.shape[:2]
+        new_w = max(1, round(w * self._sx))
+        new_h = max(1, round(h * self._sy))
+        scaled = cv2.resize(orig, (new_w, new_h), interpolation=cv2.INTER_AREA)
+        self._scaled_cache[name] = scaled
+        return scaled
 
     def _grab(self, region: Optional[Tuple] = None) -> np.ndarray:
         """region=(left, top, width, height) 또는 None(전체 화면)"""
@@ -406,7 +475,7 @@ class Finder:
         region: Optional[Tuple] = None,
     ) -> Optional[Tuple[int, int]]:
         """미리 캡처된 화면(screen)에서 탐색. 추가 캡처 없음."""
-        tmpl = self._load(name)
+        tmpl = self._get_tmpl(name)
         if tmpl is None:
             return None
         src = screen
@@ -414,6 +483,9 @@ class Finder:
             x, y, w, h = region
             src = screen[y:y+h, x:x+w]
         th, tw = tmpl.shape[:2]
+        sh, sw = src.shape[:2]
+        if sh < th or sw < tw:
+            return None
         res = cv2.matchTemplate(src, tmpl, cv2.TM_CCOEFF_NORMED)
         _, maxv, _, maxloc = cv2.minMaxLoc(res)
         c = conf if conf is not None else self._conf
@@ -445,11 +517,14 @@ class Finder:
         region: Optional[Tuple] = None,
     ) -> Optional[Tuple[int, int]]:
         """이미지 탐색. 발견 시 중심 좌표 (x, y) 반환, 없으면 None."""
-        tmpl = self._load(name)
+        tmpl = self._get_tmpl(name)
         if tmpl is None:
             return None
         scr    = self._grab(region)
         h, w   = tmpl.shape[:2]
+        sh, sw = scr.shape[:2]
+        if sh < h or sw < w:
+            return None
         result = cv2.matchTemplate(scr, tmpl, cv2.TM_CCOEFF_NORMED)
         _, maxv, _, maxloc = cv2.minMaxLoc(result)
         c  = float(conf if conf is not None else self._conf)
@@ -458,6 +533,44 @@ class Finder:
             oy = region[1] if region else 0
             return (maxloc[0] + w // 2 + ox, maxloc[1] + h // 2 + oy)
         return None
+
+    def find_box(
+        self,
+        name: str,
+        conf: Optional[float] = None,
+        region: Optional[Tuple] = None,
+    ) -> Optional[Tuple[int, int, int, int]]:
+        """이미지 탐색. 발견 시 (left, top, w, h) 반환, 없으면 None."""
+        tmpl = self._get_tmpl(name)
+        if tmpl is None:
+            return None
+        scr = self._grab(region)
+        th, tw = tmpl.shape[:2]
+        sh, sw = scr.shape[:2]
+        if sh < th or sw < tw:
+            return None
+        res = cv2.matchTemplate(scr, tmpl, cv2.TM_CCOEFF_NORMED)
+        _, maxv, _, maxloc = cv2.minMaxLoc(res)
+        c = float(conf if conf is not None else self._conf)
+        if maxv >= c:
+            ox = region[0] if region else 0
+            oy = region[1] if region else 0
+            return (maxloc[0] + ox, maxloc[1] + oy, tw, th)
+        return None
+
+    def find_score(
+        self,
+        name: str,
+        region: Optional[Tuple] = None,
+    ) -> float:
+        """이미지 최대 매칭 스코어만 반환 (임계값 무관)."""
+        tmpl = self._get_tmpl(name)
+        if tmpl is None:
+            return 0.0
+        scr    = self._grab(region)
+        result = cv2.matchTemplate(scr, tmpl, cv2.TM_CCOEFF_NORMED)
+        _, maxv, _, _ = cv2.minMaxLoc(result)
+        return float(maxv)
 
     def find_any(
         self,
@@ -611,7 +724,7 @@ class SettingsWindow:
         ("B",   "coord_b",          "F7 마우스 B  (더블클릭)"),
         ("C",   "coord_c",          "F7 마우스 C  (싱글클릭 ×4)"),
         ("M",   "myth_text_coord",  "변환 루트  myth_text 클릭"),
-        ("ON",  "check_on_offset",  "28box  ON/OFF 확인 좌표"),
+        ("ON",  "check_on_offset",  "Max Box  ON/OFF 확인 좌표"),
     ]
     SC_PRESETS = [("640×480",640,480),("800×600",800,600),("1024×768",1024,768)]
 
@@ -631,12 +744,15 @@ class SettingsWindow:
 
         nb = tk.ttk.Notebook(self.win)
         nb.pack(fill="both", expand=True, padx=8, pady=8)
+        self._nb = nb
 
         self._tab_window(nb)
         self._tab_coords(nb)
         self._tab_f6(nb)
         self._tab_f9(nb)
-        self._tab_advanced(nb)
+        self._tab_gamemode(nb)
+        self._tab_advanced1(nb)
+        self._tab_advanced2(nb)
 
         # 저장 버튼
         self._btn(self.win, "  저장  ", self._save,
@@ -701,24 +817,59 @@ class SettingsWindow:
     def _tab_f9(self, nb):
         f = self._frame(nb); nb.add(f, text=" F9 설정 ")
         rows = [
-            ("펫 업그레이드 키",    "f9_pet_upgrade",       "str"),
-            ("펫 업그레이드 주기(초)","f9_pet_interval",    "num"),
-            ("28box 감시",          "f9_box28_monitor_on",  "bool"),
-            ("28box 정확도 (0~1)",  "box28_confidence_set", "num"),
-
+            ("펫 업그레이드 키",    "f9_pet_upgrade",      "str"),
+            ("펫 업그레이드 주기(초)","f9_pet_interval",   "num"),
+            ("Max Box 감시",        "f9_box28_monitor_on", "bool"),
+            ("Max Box 번호",        "max_box",             "num"),
         ]
         self._cfg_rows(f, rows)
 
-    # ── 탭 5: 고급 ───────────────────────────────
-    def _tab_advanced(self, nb):
-        f = self._frame(nb); nb.add(f, text=" 고급 ")
+    # ── 탭 5: 게임모드 ───────────────────────────
+    def _tab_gamemode(self, nb):
+        f = self._frame(nb); nb.add(f, text=" 게임모드 ")
+        self._lbl(f, "[ 방장모드 (F11 토글) ]", bold=True, fg=self.C_ACC).pack(anchor="w", pady=(8,2), padx=10)
+        rows_host = [
+            ("방장모드 사용",   "gamemode_host_on", "bool"),
+            ("유저 닉네임",     "host_username",    "str"),
+        ]
+        self._cfg_rows(f, rows_host)
+
+        tk.Frame(f, height=1, bg=self.C_BG3).pack(fill="x", padx=10, pady=(10,4))
+        self._lbl(f, "[ 게임종료 루프 ]", bold=True, fg=self.C_ACC).pack(anchor="w", pady=(4,2), padx=10)
+        rows_end = [
+            ("게임종료 루프 사용", "game_end_on", "bool"),
+        ]
+        self._cfg_rows(f, rows_end)
+
+    # ── 탭 6: 고급1 (딜레이) ─────────────────────
+    def _tab_advanced1(self, nb):
+        f = self._frame(nb); nb.add(f, text=" 고급1 ")
+        self._lbl(f, "[ F9 루프 ]", bold=True, fg=self.C_ACC).pack(anchor="w", pady=(8,2), padx=10)
+        rows_f9 = [
+            ("키 입력 딜레이(초)",  "input_delay",    "num"),
+            ("동작 간 딜레이(초)",  "step_delay",     "num"),
+            ("루프 딜레이(초)",     "loop_delay",     "num"),
+            ("마우스 이동 시간(초)","mouse_move_dur", "num"),
+            ("열쇠 반영 대기(초)",  "key_speed_delay","num"),
+        ]
+        self._cfg_rows(f, rows_f9)
+        self._lbl(f, "[ F7 autosetting ]", bold=True, fg=self.C_ACC).pack(anchor="w", pady=(10,2), padx=10)
+        rows_f7 = [
+            ("키 입력 딜레이(초)",  "f7_input_delay",   "num"),
+            ("동작 간 딜레이(초)",  "f7_step_delay",    "num"),
+            ("마우스 이동 시간(초)","f7_mouse_move_dur","num"),
+        ]
+        self._cfg_rows(f, rows_f7)
+
+    # ── 탭 6: 고급2 (이미지 매칭 정확도) ─────────
+    def _tab_advanced2(self, nb):
+        f = self._frame(nb); nb.add(f, text=" 고급2 ")
+        self._lbl(f, "[ 이미지 매칭 정확도 ]", bold=True, fg=self.C_ACC).pack(anchor="w", pady=(8,2), padx=10)
         rows = [
-            ("이미지 매칭 정확도", "search_confidence", "num"),
-            ("키 입력 딜레이(초)", "input_delay",       "num"),
-            ("동작 간 딜레이(초)", "step_delay",        "num"),
-            ("열쇠 반영 대기(초)", "key_speed_delay",  "num"),
-            ("루프 딜레이(초)",    "loop_delay",        "num"),
-            ("마우스 이동 시간(초)","mouse_move_dur",   "num"),
+            ("그 외 나머지 (0~1)", "search_confidence",   "num"),
+            ("box 정확도 (0~1)",   "box28_confidence_set","num"),
+            ("count 정확도 (0~1)", "count_confidence",    "num"),
+            ("speed 정확도 (0~1)", "speed_confidence",    "num"),
         ]
         self._cfg_rows(f, rows)
 
@@ -840,22 +991,32 @@ class SettingsWindow:
         self.win.deiconify()
         self.win.lift()
 
+    def show_tab(self, index: int):
+        self.show()
+        self._nb.select(index)
+
 
 # ──────────────────────────────────────────────────────────
 class ConfigUI:
     """메인 창 — 간결한 상태 표시 + F9 제어 + 설정 버튼"""
 
-    C_BG = "#1e1e2e"; C_BG2 = "#313244"; C_BG3 = "#45475a"
-    C_FG = "#cdd6f4"; C_FG2 = "#a6adc8"
-    C_ACC = "#89b4fa"; C_GREEN = "#a6e3a1"; C_RED = "#f38ba8"
-    FONT  = ("Malgun Gothic", 9)
-    FONTB = ("Malgun Gothic", 10, "bold")
+    # ── 색상 팔레트 (Catppuccin Mocha 기반) ──
+    C_BG   = "#1e1e2e"; C_BG2  = "#181825"; C_BG3  = "#313244"; C_BG4 = "#45475a"
+    C_FG   = "#cdd6f4"; C_FG2  = "#a6adc8"; C_FG3  = "#6c7086"
+    C_ACC  = "#89b4fa"; C_MAUVE= "#cba6f7"; C_TEAL = "#94e2d5"
+    C_GREEN= "#a6e3a1"; C_RED  = "#f38ba8"; C_YELL = "#f9e2af"
+    C_PINK = "#f5c2e7"
+    FONT   = ("Malgun Gothic", 9)
+    FONTB  = ("Malgun Gothic", 9, "bold")
+    FONTS  = ("Malgun Gothic", 8)
+    FONTM  = ("Consolas", 9)
 
     F_DESC = [
-        ("F6", "채팅 (@자동1) + 식별코드 입력"),
-        ("F7", "autosetting 대기 → 펫 업그레이드 → 마우스 루틴"),
-        ("F8", "@태초 채팅 전송"),
-        ("F9", "메인 루프  시작 / 정지  (토글)"),
+        ("F6",  "#f9e2af", "채팅 + 식별코드 입력"),
+        ("F7",  "#cba6f7", "펫 업그레이드 · 마우스 루틴"),
+        ("F8",  "#94e2d5", "@태초 채팅 전송"),
+        ("F9",  "#a6e3a1", "메인 루프  시작 / 정지"),
+        ("F11", "#f5c2e7", "방장모드  시작 / 정지"),
     ]
 
     def __init__(self, macro: "Macro") -> None:
@@ -867,98 +1028,150 @@ class ConfigUI:
 
     def _build(self):
         r = self.root
-        r.title("SC Auto Macro")
+        r.title("SC Auto Macro  v1.3")
         r.configure(bg=self.C_BG)
         r.attributes("-topmost", True)
         r.resizable(False, False)
         r.protocol("WM_DELETE_WINDOW", self._quit)
 
-        # ── 헤더 ─────────────────────────
-        tk.Label(r, text="SC Auto Macro  v1.0", font=("Malgun Gothic",12,"bold"),
-                 bg=self.C_BG, fg=self.C_ACC).pack(pady=(12,4))
+        # ── 상단 액센트 바 ────────────────
+        tk.Frame(r, height=3, bg=self.C_ACC).pack(fill="x")
 
-        # ── 상태 표시 ─────────────────────
-        self._status_sv = tk.StringVar(value="○  정지")
-        tk.Label(r, textvariable=self._status_sv, font=self.FONTB,
-                 bg=self.C_BG, fg=self.C_FG2, width=20).pack(pady=2)
+        # ── 헤더 카드 ────────────────────
+        hdr = tk.Frame(r, bg=self.C_BG2)
+        hdr.pack(fill="x", padx=0, pady=0)
 
-        tk.Frame(r, height=1, bg=self.C_BG3).pack(fill="x", padx=12, pady=6)
+        left_hdr = tk.Frame(hdr, bg=self.C_BG2)
+        left_hdr.pack(side="left", padx=16, pady=10)
+        tk.Label(left_hdr, text="SC AUTO MACRO", font=("Malgun Gothic",13,"bold"),
+                 bg=self.C_BG2, fg=self.C_FG).pack(anchor="w")
+        tk.Label(left_hdr, text="StarCraft Automation Suite",
+                 font=self.FONTS, bg=self.C_BG2, fg=self.C_FG3).pack(anchor="w")
 
-        # ── 단축키 설명 ───────────────────
-        for key, desc in self.F_DESC:
-            row = tk.Frame(r, bg=self.C_BG); row.pack(fill="x", padx=16, pady=1)
-            tk.Label(row, text=key, font=self.FONTB, bg=self.C_BG,
-                     fg=self.C_ACC, width=4, anchor="w").pack(side="left")
-            tk.Label(row, text=desc, font=self.FONT, bg=self.C_BG,
-                     fg=self.C_FG2, anchor="w").pack(side="left")
+        ver_frame = tk.Frame(hdr, bg=self.C_BG3, padx=8, pady=4)
+        ver_frame.pack(side="right", padx=16, pady=10)
+        tk.Label(ver_frame, text="v1.3", font=("Malgun Gothic",10,"bold"),
+                 bg=self.C_BG3, fg=self.C_ACC).pack()
 
-        tk.Frame(r, height=1, bg=self.C_BG3).pack(fill="x", padx=12, pady=8)
+        # ── 상태 표시 카드 ───────────────
+        status_card = tk.Frame(r, bg=self.C_BG3, pady=8)
+        status_card.pack(fill="x", padx=12, pady=(10,4))
 
-        # ── 버튼 영역 ─────────────────────
-        bot = tk.Frame(r, bg=self.C_BG); bot.pack(pady=(0,12), padx=16)
+        self._status_dot = tk.Label(status_card, text="●", font=("Malgun Gothic",11),
+                                     bg=self.C_BG3, fg=self.C_RED)
+        self._status_dot.pack(side="left", padx=(14,4))
+        self._status_sv = tk.StringVar(value="정지 중")
+        tk.Label(status_card, textvariable=self._status_sv, font=self.FONTB,
+                 bg=self.C_BG3, fg=self.C_FG).pack(side="left")
 
-        self._f9_btn = tk.Button(bot, text="▶  F9 시작", font=self.FONTB,
+        self._host_dot = tk.Label(status_card, text="●", font=("Malgun Gothic",11),
+                                   bg=self.C_BG3, fg=self.C_BG4)
+        self._host_dot.pack(side="right", padx=(4,4))
+        tk.Label(status_card, text="방장", font=self.FONTS,
+                 bg=self.C_BG3, fg=self.C_FG3).pack(side="right", padx=(14,0))
+
+        # ── 단축키 패널 ──────────────────
+        keys_frame = tk.Frame(r, bg=self.C_BG2)
+        keys_frame.pack(fill="x", padx=12, pady=(6,4))
+
+        for key, color, desc in self.F_DESC:
+            row = tk.Frame(keys_frame, bg=self.C_BG2)
+            row.pack(fill="x", padx=8, pady=2)
+            badge = tk.Frame(row, bg=color, padx=5, pady=1)
+            badge.pack(side="left")
+            tk.Label(badge, text=key, font=("Malgun Gothic",8,"bold"),
+                     bg=color, fg="#1e1e2e").pack()
+            tk.Label(row, text=desc, font=self.FONT,
+                     bg=self.C_BG2, fg=self.C_FG2).pack(side="left", padx=8)
+
+        # ── 구분선 ───────────────────────
+        tk.Frame(r, height=1, bg=self.C_BG4).pack(fill="x", padx=12, pady=8)
+
+        # ── 버튼 행 1: 메인 컨트롤 ───────
+        row1 = tk.Frame(r, bg=self.C_BG); row1.pack(padx=12, pady=(0,4), fill="x")
+
+        self._f9_btn = tk.Button(row1, text="▶  F9 시작", font=self.FONTB,
                                   bg=self.C_GREEN, fg="#1e1e2e",
-                                  relief="flat", padx=14, pady=6,
-                                  activebackground="#94e2a1",
+                                  relief="flat", padx=14, pady=7,
+                                  activebackground="#b9f0c6",
+                                  cursor="hand2",
                                   command=self._toggle_f9)
-        self._f9_btn.pack(side="left", padx=(0,8))
+        self._f9_btn.pack(side="left", padx=(0,6), fill="x", expand=True)
 
-        tk.Button(bot, text="⚙  설정", font=self.FONT,
-                  bg=self.C_BG2, fg=self.C_FG,
-                  relief="flat", padx=12, pady=6,
-                  activebackground=self.C_BG3,
-                  command=self._open_settings).pack(side="left", padx=(0,8))
+        self._f11_btn = tk.Button(row1, text="♟  F11 방장", font=self.FONTB,
+                                   bg=self.C_BG3, fg=self.C_PINK,
+                                   relief="flat", padx=14, pady=7,
+                                   activebackground=self.C_BG4,
+                                   cursor="hand2",
+                                   command=self._toggle_f11)
+        self._f11_btn.pack(side="left", fill="x", expand=True)
 
-        tk.Button(bot, text="🖥  해상도 적용", font=self.FONT,
-                  bg=self.C_BG2, fg=self.C_ACC,
-                  relief="flat", padx=12, pady=6,
-                  activebackground=self.C_BG3,
-                  command=self._apply_resolution).pack(side="left", padx=(0,8))
+        # ── 버튼 행 2: 서브 컨트롤 ───────
+        row2 = tk.Frame(r, bg=self.C_BG); row2.pack(padx=12, pady=(0,10), fill="x")
 
-        tk.Button(bot, text="✕  종료", font=self.FONT,
-                  bg=self.C_BG2, fg=self.C_RED,
-                  relief="flat", padx=12, pady=6,
-                  activebackground=self.C_BG3,
-                  command=self._quit).pack(side="left")
+        tk.Button(row2, text="👑  방장설정", font=self.FONTS,
+                  bg=self.C_BG3, fg="#f9e2af",
+                  relief="flat", padx=10, pady=5,
+                  activebackground=self.C_BG4, cursor="hand2",
+                  command=self._open_gamemode_settings).pack(side="left", padx=(0,4), fill="x", expand=True)
 
-        # ── 로그 패널 (토글) ───────────────
-        tk.Frame(r, height=1, bg=self.C_BG3).pack(fill="x", padx=12, pady=(4,0))
+        tk.Button(row2, text="⚙  설정", font=self.FONTS,
+                  bg=self.C_BG3, fg=self.C_FG,
+                  relief="flat", padx=10, pady=5,
+                  activebackground=self.C_BG4, cursor="hand2",
+                  command=self._open_settings).pack(side="left", padx=(0,4), fill="x", expand=True)
+
+        tk.Button(row2, text="🖥  해상도", font=self.FONTS,
+                  bg=self.C_BG3, fg=self.C_ACC,
+                  relief="flat", padx=10, pady=5,
+                  activebackground=self.C_BG4, cursor="hand2",
+                  command=self._apply_resolution).pack(side="left", padx=(0,4), fill="x", expand=True)
+
+        tk.Button(row2, text="✕  종료", font=self.FONTS,
+                  bg=self.C_BG3, fg=self.C_RED,
+                  relief="flat", padx=10, pady=5,
+                  activebackground=self.C_BG4, cursor="hand2",
+                  command=self._quit).pack(side="left", fill="x", expand=True)
+
+        # ── 로그 패널 ────────────────────
+        tk.Frame(r, height=1, bg=self.C_BG4).pack(fill="x", padx=12)
 
         log_hdr = tk.Frame(r, bg=self.C_BG); log_hdr.pack(fill="x", padx=12, pady=(4,0))
-        tk.Label(log_hdr, text="이벤트 로그", font=self.FONT,
-                 bg=self.C_BG, fg=self.C_FG2).pack(side="left")
+        tk.Label(log_hdr, text="LOG", font=("Consolas",8,"bold"),
+                 bg=self.C_BG, fg=self.C_FG3).pack(side="left")
         self._log_toggle_sv = tk.StringVar(value="▼ 펼치기")
-        tk.Button(log_hdr, textvariable=self._log_toggle_sv, font=self.FONT,
-                  bg=self.C_BG, fg=self.C_ACC, relief="flat",
+        tk.Button(log_hdr, textvariable=self._log_toggle_sv, font=self.FONTS,
+                  bg=self.C_BG, fg=self.C_ACC, relief="flat", cursor="hand2",
                   command=self._toggle_log).pack(side="right")
+        tk.Button(log_hdr, text="지우기", font=self.FONTS,
+                  bg=self.C_BG, fg=self.C_FG3, relief="flat", cursor="hand2",
+                  command=self._clear_log).pack(side="right", padx=4)
 
-        # 로그 텍스트 영역 (기본 숨김)
         self._log_frame = tk.Frame(r, bg=self.C_BG)
         self._log_text = tk.Text(
-            self._log_frame,
-            height=10, width=62,
-            bg="#11111b", fg="#a6adc8",
+            self._log_frame, height=10, width=58,
+            bg=self.C_BG2, fg="#a6adc8",
             font=("Consolas", 8),
             relief="flat", state="disabled",
-            wrap="none",
+            wrap="none", insertbackground=self.C_FG,
         )
-        sb_y = tk.Scrollbar(self._log_frame, command=self._log_text.yview)
+        sb_y = tk.Scrollbar(self._log_frame, command=self._log_text.yview, width=10)
         sb_x = tk.Scrollbar(self._log_frame, orient="horizontal",
-                             command=self._log_text.xview)
-        self._log_text.configure(yscrollcommand=sb_y.set,
-                                  xscrollcommand=sb_x.set)
+                             command=self._log_text.xview, width=10)
+        self._log_text.configure(yscrollcommand=sb_y.set, xscrollcommand=sb_x.set)
         sb_y.pack(side="right", fill="y")
         sb_x.pack(side="bottom", fill="x")
-        self._log_text.pack(fill="both", expand=True)
-        # 처음엔 숨김
+        self._log_text.pack(fill="both", expand=True, padx=(12,0))
         self._log_visible = False
-        tk.Button(r, text="로그 지우기", font=("Malgun Gothic",8),
-                  bg=self.C_BG, fg=self.C_FG2, relief="flat",
-                  command=self._clear_log).pack(pady=(0,8))
+
+        # ── 하단 액센트 바 ────────────────
+        tk.Frame(r, height=2, bg=self.C_BG3).pack(fill="x", pady=(6,0))
 
     def _toggle_f9(self):
         threading.Thread(target=self.macro.f9, daemon=True).start()
+
+    def _toggle_f11(self):
+        threading.Thread(target=self.macro.f11, daemon=True).start()
 
     def _open_settings(self):
         if self._settings is None:
@@ -966,17 +1179,38 @@ class ConfigUI:
         else:
             self._settings.show()
 
+    def _open_gamemode_settings(self):
+        if self._settings is None:
+            self._settings = SettingsWindow(self.macro, self.root)
+        self._settings.show_tab(4)
+
     def _poll(self):
         """500ms 마다 F9 상태 + 로그 큐 일괄 갱신"""
         # F9 상태
         if self.macro._f9thr and self.macro._f9thr.is_alive():
-            self._status_sv.set("●  실행 중")
-            self._f9_btn.configure(text="■  F9 정지", bg=self.C_RED, fg="#1e1e2e",
-                                   activebackground="#f5a0b0")
+            if self.macro._game_end_mode:
+                self._status_sv.set("게임 종료 대기")
+                self._status_dot.configure(fg="#f9e2af")
+                self._f9_btn.configure(text="■  종료 감지 중", bg=self.C_RED, fg="#1e1e2e",
+                                       activebackground="#f5a0b0")
+            else:
+                self._status_sv.set("실행 중")
+                self._status_dot.configure(fg=self.C_GREEN)
+                self._f9_btn.configure(text="■  F9 정지", bg=self.C_RED, fg="#1e1e2e",
+                                       activebackground="#f5a0b0")
         else:
-            self._status_sv.set("○  정지")
+            self._status_sv.set("정지 중")
+            self._status_dot.configure(fg=self.C_RED)
             self._f9_btn.configure(text="▶  F9 시작", bg=self.C_GREEN, fg="#1e1e2e",
-                                   activebackground="#94e2a1")
+                                   activebackground="#b9f0c6")
+
+        # F11 방장모드 상태
+        if self.macro._f11thr and self.macro._f11thr.is_alive():
+            self._host_dot.configure(fg=self.C_PINK)
+            self._f11_btn.configure(text="■  F11 방장 정지", fg=self.C_RED)
+        else:
+            self._host_dot.configure(fg=self.C_BG4)
+            self._f11_btn.configure(text="♟  F11 방장", fg=self.C_PINK)
 
         # 로그 큐 → 텍스트 위젯 (로그 패널이 열려 있을 때만)
         if self._log_visible:
@@ -1068,12 +1302,21 @@ class Macro:
         self.cfg    = load_config()
         self.finder = Finder(self.cfg.get("search_confidence", 0.85))
         self.inp    = Input(
-            delay     = self.cfg.get("input_delay", 0.5 ),
-            mouse_dur = self.cfg.get("mouse_move_dur", 0.08),
+            delay     = self.cfg.get("input_delay", 0.5),
+            mouse_dur = self.cfg.get("mouse_move_dur", 0.5),
+        )
+        self.inp_f7 = Input(
+            delay     = self.cfg.get("f7_input_delay", 0.15),
+            mouse_dur = self.cfg.get("f7_mouse_move_dur", 0.05),
         )
         self._stop    = threading.Event()
         self._f9thr:  Optional[threading.Thread] = None
         self._pet_t   = 0.0
+        self._host_stop = threading.Event()
+        self._f11thr: Optional[threading.Thread] = None
+        self._game_end_mode = False
+        self._SC_SHOT_DIR   = self._find_sc_shot_dir()
+        log.info("📁 스크린샷 폴더: %s", self._SC_SHOT_DIR)
         self.ui: Optional[ConfigUI] = None   # 설정 UI (start() 에서 생성)
 
     def save_config(self) -> None:
@@ -1082,10 +1325,12 @@ class Macro:
         with open(CONFIG_PATH, "w", encoding="utf-8") as f:
             json.dump(self.cfg, f, indent=2, ensure_ascii=False)
         # 저장 즉시 Input 객체에도 반영 (재시작 불필요)
-        self.inp.delay     = float(self.cfg.get("input_delay",    0.5))
-        self.inp.mouse_dur = float(self.cfg.get("mouse_move_dur", 0.5))
-        log.info("config.json 저장 완료 (input_delay=%.2f, mouse_dur=%.2f)",
-                 self.inp.delay, self.inp.mouse_dur)
+        self.inp.delay        = float(self.cfg.get("input_delay",      0.5))
+        self.inp.mouse_dur    = float(self.cfg.get("mouse_move_dur",   0.5))
+        self.inp_f7.delay     = float(self.cfg.get("f7_input_delay",   0.15))
+        self.inp_f7.mouse_dur = float(self.cfg.get("f7_mouse_move_dur",0.05))
+        log.info("config.json 저장 완료 (input_delay=%.2f, f7_input_delay=%.2f)",
+                 self.inp.delay, self.inp_f7.delay)
 
     # ── 창 크기 자동 조정 ────────────────
     def _auto_resize_window(self) -> None:
@@ -1105,6 +1350,7 @@ class Macro:
             time.sleep(0.3)  # 창 조정 후 안정화 대기
         else:
             log.info("창 크기 일치: %d×%d", cw, ch)
+        self.finder.set_scale(tw, th)
 
     # ── 좌표 변환 헬퍼 ───────────────────
     def _abs_region(self, cfg_key: str) -> Optional[Tuple]:
@@ -1204,18 +1450,19 @@ class Macro:
                 return
             log.info("key 발견: %s", pos)
 
-            self.inp.press("f2");  time.sleep(self.cfg.get("step_delay", 0.2))
-            self.inp.press("2");   time.sleep(self.cfg.get("step_delay", 0.2))
+            sd = self.cfg.get("f7_step_delay", 0.2)
+            self.inp_f7.press("f2");  time.sleep(sd)
+            self.inp_f7.press("2");   time.sleep(sd)
 
             # 초반 펫 업그레이드 문자열
-            self.inp.type_seq(self.cfg.get("f6_pet_upgrade", ""))
-            time.sleep(self.cfg.get("step_delay", 0.2))
+            self.inp_f7.type_seq(self.cfg.get("f6_pet_upgrade", ""))
+            time.sleep(sd)
 
-            self.inp.press("3");   time.sleep(self.cfg.get("step_delay", 0.2))
+            self.inp_f7.press("3");   time.sleep(sd)
 
             # 마무리 동작 문자열
-            self.inp.type_seq(self.cfg.get("f6_final_action", ""))
-            time.sleep(self.cfg.get("step_delay", 0.2))
+            self.inp_f7.type_seq(self.cfg.get("f6_final_action", ""))
+            time.sleep(sd)
 
             # 마우스 루틴
             self._f7_mouse_routine()
@@ -1238,21 +1485,23 @@ class Macro:
         if ca == [0, 0] or cb == [0, 0] or cc == [0, 0]:
             log.warning("F7 마우스 루틴: 좌표 A/B/C 미설정 (config.json 확인)")
 
+        _D = 0.45  # 클릭 간 고정 딜레이 (설정값과 무관)
+
         # 좌표 A
-        self.inp.move(*ca)
-        self.inp.dclick()
-        self.inp.press("q")
+        self.inp_f7.move(*ca)
+        self.inp_f7.dclick(d=_D)
+        self.inp_f7.press("q", d=_D)
 
         # 좌표 B
-        self.inp.move(*cb)
-        self.inp.dclick()
-        self.inp.press("q")
+        self.inp_f7.move(*cb)
+        self.inp_f7.dclick(d=_D)
+        self.inp_f7.press("q", d=_D)
 
         # 좌표 C (싱글클릭 × 4)
-        self.inp.move(*cc)
+        self.inp_f7.move(*cc)
         for _ in range(4):
-            self.inp.click()
-            self.inp.press("q")
+            self.inp_f7.click(d=_D)
+            self.inp_f7.press("q", d=_D)
 
     # ─────────────────────────────────────
     # F8: @태초 전송
@@ -1263,9 +1512,9 @@ class Macro:
             return
         log.info("═══ F8 ═══")
         try:
-            self.inp.press("enter")
-            self.inp.paste_text("@태초")
-            self.inp.press("enter")
+            self.inp.press("enter", d=0.01)
+            _type_unicode("@태초", delay=0.01)
+            self.inp.press("enter", d=0.01)
         except Exception as e:
             log.error("F8 오류: %s", e, exc_info=True)
 
@@ -1288,298 +1537,475 @@ class Macro:
         self._f9thr  = threading.Thread(target=self._f9_loop, daemon=True)
         self._f9thr.start()
 
+    # ─────────────────────────────────────
+    # F11: 방장모드 시작/정지
+    # ─────────────────────────────────────
+    def f11(self) -> None:
+        if not self.cfg.get("gamemode_host_on", False):
+            log.warning("F11: 방장모드 비활성 (설정에서 활성화 필요)")
+            return
+
+        if self._f11thr and self._f11thr.is_alive():
+            log.info("═══ F11 방장모드 정지 ═══")
+            self._host_stop.set()
+            return
+
+        if not is_sc_active():
+            log.warning("F11: 스타크래프트 비활성 - 무시")
+            return
+
+        log.info("═══ F11 방장모드 시작 ═══")
+        self._host_stop.clear()
+        self._f11thr = threading.Thread(target=self._host_loop, daemon=True)
+        self._f11thr.start()
+
+    def _host_loop(self) -> None:
+        HOST_CONF = 0.65
+
+        def _full():
+            hwnd = _sc_find_hwnd()
+            if not hwnd:
+                return None
+            gx, gy, gw, gh = _sc_get_rect(hwnd)
+            return (gx, gy, gw, gh) if gw > 0 else None
+
+        def _find(name):
+            reg = _full()
+            if reg is None:
+                return None
+            return self.finder.find(name, HOST_CONF, reg)
+
+        def _click_and_wait(name: str, delay: float) -> None:
+            res = _find(name)
+            if res:
+                self.inp.click(int(res[0]), int(res[1]))
+                log.info("✅ [방장] %s 클릭", name)
+                time.sleep(delay)
+
+        def _ocr_username(h3_pos) -> str:
+            # Host_3 중심 기준 닉네임 슬롯 전체 영역 (x-720, y-518, 290×340)
+            px = max(0, int(h3_pos[0]) - 720)
+            py = max(0, int(h3_pos[1]) - 518)
+            pw, ph = 290, 340
+            shot = pyautogui.screenshot(region=(px, py, pw, ph))
+            img  = cv2.cvtColor(np.array(shot), cv2.COLOR_RGB2GRAY)
+            _, img = cv2.threshold(img, 80, 255, cv2.THRESH_BINARY)
+            img = cv2.resize(img, (pw * 2, ph * 2), interpolation=cv2.INTER_CUBIC)
+            return pytesseract.image_to_string(_PILImage.fromarray(img), config="--psm 6 -c tessedit_char_whitelist=ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_'").strip()
+
+        usernames = [u.strip() for u in self.cfg.get("host_username", "Hanayoi").split(",") if u.strip()]
+
+        try:
+            # ── Step 1 ─────────────────────────────────────────
+            log.info("🔍 [방장] Step1: Host_1 대기")
+            goto_step = 2  # 기본값: Host_1 클릭 후 Step2
+            step1_done = False
+            while not self._host_stop.is_set():
+                time.sleep(0.1)
+                h1 = _find("Host_1")
+                if h1:
+                    log.info("✅ [방장] Host_1 감지 → 클릭")
+                    self.inp.click(int(h1[0]), int(h1[1]))
+                    time.sleep(3.0)
+                    step1_done = True
+                    break
+
+                # Host_1 없음: Host_3 확인
+                h3 = _find("Host_3")
+                if h3:
+                    log.info("⏭️ [방장] Host_1 없음 / Host_3 감지 → Step3 이동")
+                    time.sleep(1.0)
+                    goto_step = 3
+                    step1_done = True
+                    break
+
+                # Host_3 없음: Host_2 확인
+                h2 = _find("Host_2")
+                if h2:
+                    log.info("⏭️ [방장] Host_1 없음 / Host_2 감지 → Step2 이동")
+                    time.sleep(1.0)
+                    goto_step = 2
+                    step1_done = True
+                    break
+
+            if not step1_done:
+                return  # 정지 요청
+
+            # ── Step 2 ─────────────────────────────────────────
+            if goto_step <= 2:
+                log.info("🔍 [방장] Step2: Host_2 대기")
+                while not self._host_stop.is_set():
+                    time.sleep(0.1)
+                    # Host_3(OCR 영역) 먼저 확인 → 바로 Step3
+                    h3 = _find("Host_3")
+                    if h3:
+                        log.info("⏭️ [방장] Step2 중 Host_3 감지 → Step3 이동")
+                        time.sleep(1.0)
+                        break
+
+                    h2 = _find("Host_2")
+                    if h2:
+                        log.info("✅ [방장] Host_2 감지 → 클릭")
+                        self.inp.click(int(h2[0]), int(h2[1]))
+                        time.sleep(2.5)
+                        break
+                else:
+                    return
+
+            # ── Step 3 ─────────────────────────────────────────
+            def _ocr_match(username: str, ocr_lines: list) -> bool:
+                """OCR 각 행과 유사도 비교 (0.70 이상이면 매칭)."""
+                u = username.lower()
+                for line in ocr_lines:
+                    l = line.strip().lower()
+                    if not l:
+                        continue
+                    # 직접 포함 체크
+                    if u in l:
+                        return True
+                    # 유사도 체크 (OCR 오인식 보정)
+                    ratio = difflib.SequenceMatcher(None, u, l).ratio()
+                    if ratio >= 0.70:
+                        return True
+                return False
+
+            reg0 = _full()
+            if reg0:
+                log.info("🖥️ [방장] 게임 창 크기: %dx%d", reg0[2], reg0[3])
+            log.info("🔍 [방장] Step3: Host_3 OCR 루프 시작 (닉네임: %s)", ", ".join(usernames))
+            while not self._host_stop.is_set():
+                time.sleep(0.1)
+                h3 = _find("Host_3")
+                if not h3:
+                    continue
+
+                log.info("🟡 [방장] Host_3 감지 → OCR")
+                ocr_text = _ocr_username(h3)
+                log.info("📋 [방장] OCR: %r", ocr_text)
+                ocr_lines = ocr_text.splitlines()
+
+                found   = [u for u in usernames if _ocr_match(u, ocr_lines)]
+                missing = [u for u in usernames if not _ocr_match(u, ocr_lines)]
+                log.info("✅ 확인: %s | ❌ 미확인: %s", found, missing)
+                if not missing:
+                    log.info("🎯 [방장] 전원 확인 (%s) → 3.0s 후 Host_4 클릭", ", ".join(found))
+                    time.sleep(3.0)
+                    _click_and_wait("Host_4", 0.5)
+                    break
+                else:
+                    log.info("⏳ [방장] 미확인 인원 있음 → 재탐색")
+                    time.sleep(0.5)
+
+        except Exception as e:
+            log.error("[방장] 루프 오류: %s", e, exc_info=True)
+
+        log.info("═══ F11 방장모드 종료 ═══")
+
+    # ─────────────────────────────────────
+    # 게임 종료 루프
+    # ─────────────────────────────────────
+    @staticmethod
+    def _find_sc_shot_dir() -> str:
+        """StarCraft 스크린샷 폴더를 자동 탐색 (OneDrive 리디렉션 포함)."""
+        import ctypes, ctypes.wintypes
+        # SHGetFolderPathW로 실제 내 문서 경로 획득 (OneDrive 리디렉션 자동 반영)
+        try:
+            buf = ctypes.create_unicode_buffer(ctypes.wintypes.MAX_PATH)
+            ctypes.windll.shell32.SHGetFolderPathW(None, 5, None, 0, buf)
+            docs = buf.value
+        except Exception:
+            docs = os.path.expanduser("~\\Documents")
+
+        home = os.path.expanduser("~")
+        candidates = [
+            os.path.join(docs, "StarCraft", "Screenshots"),
+            os.path.join(home, "Documents", "StarCraft", "Screenshots"),
+            os.path.join(home, "OneDrive", "문서", "StarCraft", "Screenshots"),
+            os.path.join(home, "OneDrive", "Documents", "StarCraft", "Screenshots"),
+        ]
+        for path in candidates:
+            if os.path.isdir(path):
+                return path
+        # 폴더가 없으면 내 문서 기준 경로 반환 (게임 최초 실행 전)
+        return os.path.join(docs, "StarCraft", "Screenshots")
+
+    _SC_SHOT_DIR: str = ""   # 런타임에 _find_sc_shot_dir()로 초기화
+
+    def _game_end_check(self, reg, is_active: bool) -> tuple:
+        """
+        게임종료 루프.
+        - is_active=False : SelectBoss_0 감지 시 True 반환 (활성화)
+        - is_active=True  : BossClear_2 감지 시 종료 시퀀스 실행
+        반환: (새로운 is_active 값, 시퀀스 실행 여부)
+        """
+        import glob as _glob
+
+        if not is_active:
+            # SelectBoss_1 탐색 영역: SelectBoss_1T 기준 노란 박스 비율 (rx=0.2739, ry=0.1682, rw=0.4522, rh=0.4267)
+            gx, gy, gw, gh = reg
+            sb1_reg = (
+                int(gx + gw * 0.2739),
+                int(gy + gh * 0.1682),
+                int(gw * 0.4522),
+                int(gh * 0.4267),
+            )
+            if self.finder.find("SelectBoss_0", 0.80, sb1_reg):
+                log.info("🎮 [종료] SelectBoss_1 감지 → 게임종료 루프 활성화")
+                return True, False
+            return False, False
+
+        # BossClear_2 탐색 영역: BossClear_1T 기준 노란 박스 비율 (rx=0.2677, ry=0.2494, rw=0.4553, rh=0.3024)
+        gx, gy, gw, gh = reg
+        bc2_reg = (
+            int(gx + gw * 0.2677),
+            int(gy + gh * 0.2494),
+            int(gw * 0.4553),
+            int(gh * 0.3024),
+        )
+        # BossClear_2 감지 → 종료 시퀀스
+        if not self.finder.find("BossClear_2", 0.80, bc2_reg):
+            return True, False
+
+        log.info("🏆 [종료] BossClear_2 감지 → 종료 시퀀스 시작")
+
+        # 스크린샷 폴더 감시 시작 (PrtSc 전)
+        before = set(_glob.glob(self._SC_SHOT_DIR + r"\*.png") +
+                     _glob.glob(self._SC_SHOT_DIR + r"\*.bmp"))
+        log.info("📁 [종료] 폴더 감시 시작")
+
+        self.inp.press("print screen")
+        log.info("📸 [종료] PrtSc 입력")
+        time.sleep(1.5)
+
+        # 신규 파일 확인 → 없으면 루프 중단
+        after = set(_glob.glob(self._SC_SHOT_DIR + r"\*.png") +
+                    _glob.glob(self._SC_SHOT_DIR + r"\*.bmp"))
+        new_files = after - before
+        if not new_files:
+            log.warning("⚠️ [종료] 스크린샷 파일 미확인 → 루프 중단")
+            return True, False   # 활성 상태 유지, 시퀀스 미실행
+        log.info("✅ [종료] 스크린샷 확인: %s", os.path.basename(new_files.pop()))
+        time.sleep(0.5)
+        self.inp.press("f10");   time.sleep(0.3)
+        self.inp.press("e");     time.sleep(0.3)
+        self.inp.press("s");     time.sleep(0.3)
+        self.inp.press("q");     time.sleep(3.0)
+        self.inp.press("enter"); time.sleep(0.5)
+
+        if self.cfg.get("gamemode_host_on", False):
+            log.info("♟️ [종료] 방장모드 ON → F11 직접 호출")
+            threading.Thread(target=self.f11, daemon=True).start()
+
+        log.info("✅ [종료] 게임 종료 시퀀스 완료")
+        return False, True   # 시퀀스 완료 후 비활성화
+
     def _f9_loop(self) -> None:
-        conf      = self.cfg.get("search_confidence", 0.85)
-        b28_conf  = self.cfg.get("box28_confidence_set", 0.97)
-        key_skip  = False   # 28box ON 확인 후 열쇠루틴 스킵 플래그
+        # macro.exe 추출 정확도 상수
+        SEAL_CONF   = 0.75
+        TARGET_CONF = 0.65
+        SPEED2_CONF = 0.93
+        SPEED3_CONF = 0.78
+        COUNT_CONF  = 0.94
+        BOX25_CONF  = 0.91
+        BOX26_CONF  = 0.91
+        BOX27_CONF  = 0.91
+        ON_CONF     = 0.70
+        KEY_CONF    = 0.78
+
+        is_auto_sell_set = False
+        self._game_end_mode = False
 
         while not self._stop.is_set():
             try:
-                # ── Loop Start ──────────────────────────
-                self.inp.press("f2")
-                time.sleep(self.cfg.get("step_delay", 0.1))
+                # ── 게임 창 위치/크기 ────────────────────
+                hwnd = _sc_find_hwnd()
+                if not hwnd:
+                    time.sleep(1)
+                    continue
+                gx, gy, gw, gh = _sc_get_rect(hwnd)
+                if gw <= 0 or gh <= 0:
+                    time.sleep(1)
+                    continue
+
+                full_reg = (gx, gy, gw, gh)
+
+                # ── 게임종료 모드: BossClear_2 전담 탐색 ──
+                if self._game_end_mode:
+                    try:
+                        _, did_end = self._game_end_check(full_reg, True)
+                    except Exception as e:
+                        log.error("[종료] 게임종료 루프 오류: %s", e, exc_info=True)
+                        time.sleep(1.0)
+                        continue
+                    if did_end:
+                        log.info("🔴 [종료] 게임종료 완료 → F9 루프 종료")
+                        self._stop.set()
+                        break
+                    time.sleep(0.12)
+                    continue
 
                 self._pet_upgrade_check()
                 if self._stop.is_set():
                     break
 
-                gr     = self._abs_region("region_game")
-                ur     = self._abs_region("region_ui")
-                screen = self.finder.grab_screen()
+                # ── 탐색 영역 (게임 창 상대 비율) ─────────
+                box_reg   = (int(gx + gw*0.10), int(gy + gh*0.60), int(gw*0.40), int(gh*0.20))
+                info_reg  = (int(gx + gw*0.25), int(gy + gh*0.75), int(gw*0.45), int(gh*0.23))
+                cmd_reg   = (int(gx + gw*0.65), int(gy + gh*0.65), int(gw*0.35), int(gh*0.35))
+                field_reg = (gx + 50, gy + 50, gw - 100, gh - 250)
+                b28_conf  = self.cfg.get("box28_confidence_set", 0.93)
+                max_box   = int(self.cfg.get("max_box", 28))
 
-                # ① target_circle / target_circle2 탐색
-                tc = self.finder.find_any_in(screen, ["target_circle", "target_circle2"], conf, gr)
-                if not tc:
-                    if not hasattr(self, "_last_tc_log") or time.time() - self._last_tc_log > 10:
-                        log.info("  [F9] target_circle 탐색 중...")
-                        self._last_tc_log = time.time()
-                    time.sleep(self.cfg.get("loop_delay", 0.5))
-                    continue
-                _, tcx, tcy = tc
-
-                # ② 스킵 모드 확인 → ⑤ 변환루트
-                # key_skip 은 F9 ON 동안만 유지 (재시작 시 False 초기화)
-                if key_skip:
-                    log.info("  [②스킵] 변환루트 진행")
-                    time.sleep(self.cfg.get("loop_delay", 0.5))
-                    self._conversion_route(tcx, tcy, conf, gr, ur, b28_conf, key_skip=True)
-                    continue
-
-                # ③ 28box 확인
-                p28 = self.finder.find_in(screen, "28box", b28_conf, ur)
-                if p28:
-                    on_p = self.finder.find_in(screen, "on", 0.85, ur)
-                    if on_p:
-                        log.info("  [③] 28box + ON 확인 → key_skip = True")
-                        key_skip = True
-                        time.sleep(self.cfg.get("loop_delay", 0.5))
-                        continue
-                    else:
-                        log.info("  [③] 28box + OFF → ON 전환 처리")
-                        self._handle_28box(ur)
-                        key_skip = True
-                        log.info("  [스킵 모드 ON] F9 재시작 전까지 유지")
-                        time.sleep(self.cfg.get("loop_delay", 0.5))
+                # ── 게임종료 루프 (SelectBoss_0 감지) ─────
+                if self.cfg.get("game_end_on", False):
+                    active, _ = self._game_end_check(full_reg, False)
+                    if active:
+                        log.info("🟡 [종료] SelectBoss_0 감지 → 게임종료 모드 전환")
+                        self._game_end_mode = True
                         continue
 
-                # ④ seal_idle 확인 (28box 미감지 시)
-                seal = self.finder.find_in(screen, "seal_idle", conf, gr)
-                if not seal:
-                    log.info("  [④] seal_idle 미감지 → 대기 후 Loop Start")
-                    time.sleep(self.cfg.get("loop_delay", 0.3))
-                    continue
-                log.info("  [④] seal_idle 감지 → 클릭")
-                self.inp.click(*seal)
-                if self._stop.is_set():
-                    break
+                # ── Max Box 자동 판매 설정 ───────────────
+                if self.cfg.get("f9_box28_monitor_on", True) and not is_auto_sell_set:
+                    if self.finder.find(f"{max_box}box", b28_conf, box_reg):
+                        log.info("📦 [%d상자 발견] 자동 판매 설정 시작", max_box)
+                        log.info("⌨️ [자동판매] '3' 키 입력")
+                        self.inp.press("3")
+                        time.sleep(0.5)
+                        _off = self.cfg.get("check_on_offset", [0, 0])
+                        if _off and (_off[0] != 0 or _off[1] != 0):
+                            cx, cy = self._abs_coord("check_on_offset")
+                        else:
+                            cx, cy = self._abs_xy("check_on_offset_x", "check_on_offset_y")
+                        pyautogui.moveTo(cx, cy)
+                        time.sleep(0.4)
+                        if self.finder.find("on", ON_CONF, cmd_reg):
+                            log.info("✅ [자동판매] ON 확인 → 설정 완료")
+                        else:
+                            log.info("⌨️ [자동판매] ON 미감지 → A키 입력")
+                            self.inp.press("a")
+                        is_auto_sell_set = True
+                        time.sleep(0.5)
+                        continue
 
-                # speed 확인
-                speed = self.finder.find_any_in(screen, ["speed2", "speed3"], conf, ur)
-                if speed:
-                    log.info("  speed %s 감지 → 열쇠루틴", speed[0])
-                    self._key_routine(tcx, tcy, conf, b28_conf, gr, ur)
+                # ── seal_idle + target_circle 탐색 ────────
+                seal = self.finder.find("seal_idle", SEAL_CONF, field_reg)
+                target = self.finder.find("target_circle", TARGET_CONF, full_reg)
+                if not target:
+                    target = self.finder.find("target_circle2", TARGET_CONF, full_reg)
+
+                if not (seal and target):
+                    time.sleep(0.12)
+                    continue
+
+                sx, sy = seal
+                tx, ty = target
+
+                # ── 초반 분기 ────────────────────────────
+                if self.cfg.get("f9_early_branch_on", True):
+                    log.info("⚙️ [초반 분기] 대기 인장 선택")
+                    pyautogui.click(int(sx), int(sy))
+                    time.sleep(0.05)
+
+                    if self.finder.find("speed3", SPEED3_CONF, info_reg):
+                        log.info("⏩ speed3(3배속) 감지 → 열쇠 탐색")
+                        key_res = self.finder.find("key", KEY_CONF, field_reg)
+                        if key_res:
+                            log.info("🔑 열쇠 발견 → 클릭 후 타겟 우클릭")
+                            self.inp.click(int(key_res[0]), int(key_res[1]))
+                            self.inp.rclick(int(tx), int(ty))
+                            time.sleep(1.0)
+                        else:
+                            log.info("🔍 speed3 감지 / 열쇠 없음 → 대기")
+                            time.sleep(0.2)
+                        continue
+
+                    elif self.finder.find("speed2", SPEED2_CONF, info_reg):
+                        log.info("▶️ speed2(2배속) 감지 → 열쇠 탐색")
+                        key_res = self.finder.find("key", KEY_CONF, field_reg)
+                        if key_res:
+                            log.info("🔑 열쇠 발견 → 클릭 후 타겟 우클릭")
+                            self.inp.click(int(key_res[0]), int(key_res[1]))
+                            self.inp.rclick(int(tx), int(ty))
+                            time.sleep(1.0)
+                        else:
+                            log.info("🔍 speed2 감지 / 열쇠 없음 → 대기")
+                            time.sleep(0.2)
+                        continue
+
+                # ── 변환 초기 클릭 ────────────────────────
+                pyautogui.click(int(gx + gw * 0.6), int(gy + gh * 0.5) - 30)
+                time.sleep(0.1)
+
+                # ── bou(파편) 판정 ────────────────────────
+                bou_found = self.finder.find("bou", 0.6, info_reg)
+
+                if not bou_found:
+                    log.info("🔮 [초월인장] 파편 0개 → 일반 변환")
+                    pyautogui.click(int(sx), int(sy))
+                    time.sleep(0.1)
+                    pyautogui.rightClick(int(tx), int(ty))
                 else:
-                    # ⑤ 변환루트
-                    log.info("  speed 미감지 → ⑤ 변환루트")
-                    self._conversion_route(tcx, tcy, conf, gr, ur, b28_conf)
+                    snapshot    = pyautogui.screenshot()
+                    found_num   = None
+                    matched_box = None
+                    for i in range(1, 4):
+                        c_box = self.finder.find_box(f"count_{i}", COUNT_CONF, info_reg)
+                        if c_box:
+                            found_num   = i
+                            matched_box = c_box
+                            break
 
-                time.sleep(self.cfg.get("loop_delay", 0.5))
+                    if found_num and matched_box:
+                        if self._check_double_digit(matched_box, found_num, snapshot):
+                            log.info("💀 [종말인장] 숫자 %d 주변 다른 숫자(10개+) → A키", found_num)
+                            self.inp.press("a")
+                        else:
+                            log.info("🔮 [초월인장] 파편 %d개 부족 → 일반 변환", 4 - found_num)
+                            pyautogui.click(int(sx), int(sy))
+                            time.sleep(0.1)
+                            pyautogui.rightClick(int(tx), int(ty))
+                    else:
+                        log.info("💀 [종말인장] 파편 4개+ (인식 초과) → A키")
+                        self.inp.press("a")
+
+                time.sleep(0.5)
 
             except Exception as e:
                 log.error("F9 루프 오류: %s", e, exc_info=True)
-                time.sleep(0.5)
+                time.sleep(1.0)
 
         log.info("F9 루프 종료")
+
+    def _check_double_digit(self, box: Tuple, matched_num: int, snapshot) -> bool:
+        """count 이미지 우측 12×14픽셀 스캔 → 밝은 픽셀(>80) 있으면 True (10개 이상 판정)"""
+        if snapshot is None:
+            return False
+        left, top, width, height = box
+        gsx = int(left + width + 2)
+        gsy = int(top)
+        for dx in range(12):
+            for dy in range(14):
+                try:
+                    pv = snapshot.getpixel((gsx + dx, gsy + dy))
+                    v  = pv[0] if isinstance(pv, tuple) else pv
+                    if v > 80:
+                        return True
+                except Exception:
+                    pass
+        if matched_num in (2, 3):
+            lr = (int(left - 16), int(top - 2), 20, int(height + 4))
+            if self.finder.find_box("count_1", 0.88, lr):
+                return True
+        return False
+
     # ── 주기적 펫 업그레이드 ──────────────
     def _pet_upgrade_check(self) -> None:
         interval = self.cfg.get("f9_pet_interval", 200)
         if time.time() - self._pet_t >= interval:
             log.info("[펫 업그레이드] 실행")
+            self.inp.press("2")
             self.inp.type_seq(self.cfg.get("f9_pet_upgrade", ""))
             self._pet_t = time.time()
-
-    # ── seal 확인 ─────────────────────────
-    def _seal_check(self, conf: float) -> None:
-        p = self.finder.find("seal_idle", conf)
-        if p:
-            log.debug("seal_idle 클릭: %s", p)
-            self.inp.click(*p)
-
-    def _seal_check_in(self, screen: np.ndarray, conf: float,
-                       region: Optional[Tuple] = None) -> None:
-        """캡처된 화면에서 seal_idle 확인 (추가 캡처 없음)"""
-        p = self.finder.find_in(screen, "seal_idle", conf, region)
-        if p:
-            log.debug("seal_idle 클릭: %s", p)
-            self.inp.click(*p)
-
-    # ─────────────────────────────────────
-    # 열쇠 루틴
-    # ─────────────────────────────────────
-    def _key_routine(self, tcx: int, tcy: int, conf: float, b28_conf: float,
-                     gr: Optional[Tuple] = None, ur: Optional[Tuple] = None) -> None:
-        """
-        key 클릭 → target 우클릭 → key_speed_delay 대기 → Loop Start 복귀.
-        Loop Start에서 F2 + speed 확인이 자동으로 이루어짐.
-        key 없으면 변환 루트 / 28box 감지 시 처리 후 종료.
-        """
-        log.info("  [열쇠 루틴]")
-        self._pet_upgrade_check()
-
-        key_p = self.finder.find("key", conf, gr)
-        if not key_p:
-            log.info("  [열쇠루틴] key 이미지 미감지 → 변환루트")
-            self._conversion_route(tcx, tcy, conf, gr, ur, b28_conf)
-            return
-
-        log.info("  [열쇠루틴] key 감지 @ %s → 삽입", key_p)
-        # 열쇠 1회 삽입
-        self.inp.click(*key_p)
-        self.inp.rclick(tcx, tcy)
-
-        # 28box 감시
-        if self.cfg.get("f9_box28_monitor_on", True):
-            time.sleep(self.cfg.get("step_delay", 0.1))
-            scr = self.finder.grab_screen()
-            p28 = self.finder.find_in(scr, "28box", b28_conf, ur)
-            if p28:
-                log.info("  28box 감지!")
-                self._handle_28box(ur)
-                return
-
-        # speed 반영 대기 → return → Loop Start (F2 + speed 자동 확인)
-        time.sleep(self.cfg.get("key_speed_delay", 1.0))
-        log.info("  열쇠 삽입 완료 → Loop Start 복귀")
-
-    def _handle_28box(self, ur: Optional[Tuple] = None) -> None:
-        """28box 처리: 3 입력 → ON/OFF 확인 및 전환"""
-        self.inp.press("3")
-        time.sleep(self.cfg.get("step_delay", 0.2))
-
-        # check_on_offset [x,y] 우선 / 없으면 x,y 개별키 fallback
-        _off = self.cfg.get("check_on_offset", [0, 0])
-        if _off and (_off[0] != 0 or _off[1] != 0):
-            cx, cy = self._abs_coord("check_on_offset")
-        else:
-            cx, cy = self._abs_xy("check_on_offset_x", "check_on_offset_y")
-        self.inp.move(cx, cy)
-        time.sleep(self.cfg.get("step_delay", 0.2))
-
-        on_p = self.finder.find("on", 0.85, ur)
-        if on_p:
-            log.info("  ON 상태 확인 → 열쇠 루틴 종료")
-        else:
-            log.info("  OFF 상태 → ON 전환 후 종료")
-            self.inp.click(cx, cy)
-
-    # ─────────────────────────────────────
-    # 변환 루트
-    # ─────────────────────────────────────
-    def _conversion_route(self, tcx: int, tcy: int, conf: float,
-                          gr: Optional[Tuple] = None, ur: Optional[Tuple] = None,
-                          b28_conf: float = 0.97, key_skip: bool = False) -> None:
-        """
-        myth_text_coord 클릭 → myth_text 유무로 분기:
-          없음 → 일반 변환
-          있음 → 특수 변환 판별 (bou + count)
-        """
-        log.info("  [변환 루트]")
-        mc = self._abs_coord("myth_text_coord")
-
-        if mc == [0, 0]:
-            log.warning("  myth_text_coord 미설정 (config.json 확인)")
-
-        # speed 미감지 시에만 seal_idle 클릭 (speed 있으면 이미 클릭된 상태)
-        scr = self.finder.grab_screen()
-        speed_now = self.finder.find_any_in(scr, ["speed2", "speed3"], conf, ur)
-        if not speed_now:
-            seal = self.finder.find_in(scr, "seal_idle", conf, gr)
-            if seal:
-                log.info("  [변환루트] speed 없음 → seal_idle 클릭")
-                self.inp.click(*seal)
-                time.sleep(self.cfg.get("step_delay", 0.2))
-
-        self.inp.move(*mc)
-        self.inp.click()
-        time.sleep(self.cfg.get("step_delay", 0.2))
-
-        myth = self.finder.find("myth_text", conf, ur)
-        if not myth:
-            self._normal_conversion(tcx, tcy, conf, gr)
-        else:
-            self._special_conversion_check(tcx, tcy, conf, ur, gr, b28_conf, key_skip)
-
-    def _normal_conversion(self, tcx: int, tcy: int, conf: float,
-                           gr: Optional[Tuple] = None) -> None:
-        """일반 변환: seal_idle 클릭 → target 우클릭 → step_delay 대기 → Loop Start"""
-        log.info("  → 일반 변환 → Loop Start 복귀")
-        sp = self.finder.find("seal_idle", conf, gr)
-        if sp:
-            self.inp.click(*sp)
-        self.inp.rclick(tcx, tcy)
-        time.sleep(self.cfg.get("step_delay", 0.1))
-        # return → _conversion_route → _f9_loop 상단(Loop Start)으로 복귀
-
-    def _special_conversion_check(self, tcx: int, tcy: int, conf: float,
-                                   ur: Optional[Tuple] = None,
-                                   gr: Optional[Tuple] = None,
-                                   b28_conf: float = 0.97,
-                                   key_skip: bool = False) -> None:
-        """
-        특수 변환 판별:
-          bou 탐색 → bou 우측 영역에서 count_1/2/3 탐색
-            count 있음(1~3) → 특수 불가 → 일반 변환
-            count 없음(4+)  → 특수 변환 수행
-        """
-        log.info("  → 특수 변환 판별")
-        bp = self.finder.find("bou", conf, ur)
-        if not bp:
-            log.warning("  bou 없음 → 일반 변환 fallback")
-            self._normal_conversion(tcx, tcy, conf, gr)
-            return
-
-        bx, by = bp
-        count_region = (bx + 5, by - 20, 130, 50)
-
-        count_found = any(
-            self.finder.find(f"count_{i}", conf, count_region)
-            for i in range(1, 4)   # count_1, count_2, count_3
-        )
-
-        if count_found:
-            log.info("  count 1~3 확인 → 특수 변환 불가 → 일반 변환")
-            self._normal_conversion(tcx, tcy, conf)
-        else:
-            log.info("  count 4+ 확인 → 특수 변환 수행")
-            self._do_special_conversion(tcx, tcy, conf, b28_conf, gr, ur, key_skip)
-
-    def _do_special_conversion(self, tcx: int = 0, tcy: int = 0,
-                               conf: float = 0.85, b28_conf: float = 0.97,
-                               gr: Optional[Tuple] = None,
-                               ur: Optional[Tuple] = None,
-                               key_skip: bool = False) -> None:
-        """
-        특수 변환:
-        - A키를 0.5초 간격으로 8초 동안 입력
-        - 2초마다 (key_skip=False 일 때만): seal_idle 클릭 → speed2/3 확인
-          → speed 감지 시: 열쇠 루틴 전환
-          → 미감지: 계속 A 입력
-        - 8초 완료 후: Loop Start로 복귀
-        """
-        log.info("  [특수 변환] 시작 (8초, A키 0.5s 간격, key_skip=%s)", key_skip)
-        t_start      = time.time()
-        t_last_check = time.time()
-
-        while not self._stop.is_set():
-            elapsed = time.time() - t_start
-            if elapsed >= 8.0:
-                break
-
-            # A 키 입력
-            self.inp.press("a")
-            log.info("    A 입력 @ %.1fs", elapsed)
-
-            # 2초마다 seal+speed 체크 (key_skip=False 일 때만)
-            if not key_skip and time.time() - t_last_check >= 2.0:
-                t_last_check = time.time()
-                scr = self.finder.grab_screen()
-
-                seal = self.finder.find_in(scr, "seal_idle", conf, gr)
-                if seal:
-                    self.inp.click(*seal)
-                    log.info("    seal_idle 클릭")
-                    time.sleep(self.cfg.get("step_delay", 0.1))
-                    scr = self.finder.grab_screen()
-
-                speed = self.finder.find_any_in(scr, ["speed2", "speed3"], conf, ur)
-                if speed:
-                    log.info("  [특수 변환] speed 감지 → 열쇠 루틴 전환")
-                    self._key_routine(tcx, tcy, conf, b28_conf, gr, ur)
-                    return
-
-            time.sleep(0.5)
-
-        log.info("  [특수 변환] 8초 완료 → Loop Start")
 
     # ─────────────────────────────────────
     # 시작
@@ -1597,6 +2023,7 @@ class Macro:
         keyboard.add_hotkey("f7",        spawn(self.f7))
         keyboard.add_hotkey("f8",        spawn(self.f8))
         keyboard.add_hotkey("f9",        spawn(self.f9))
+        keyboard.add_hotkey("f11",       spawn(self.f11))
         keyboard.add_hotkey("ctrl+f12",  self._quit)
         keyboard.add_hotkey("ctrl+f11",
                             lambda: self.root.after(0, self.ui.toggle)
