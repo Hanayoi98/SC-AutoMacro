@@ -1814,7 +1814,6 @@ class Macro:
                     time.sleep(1)
                     continue
 
-                self.finder.set_scale(gw, gh)
                 full_reg = (gx, gy, gw, gh)
 
                 # ── 게임종료 모드: BossClear_2 전담 탐색 ──
