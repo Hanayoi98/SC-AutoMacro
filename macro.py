@@ -193,6 +193,8 @@ DEFAULT_CONFIG: dict = {
     "f9_box28_monitor_on": True,
     "max_box":              28,
     "f9_early_branch_on":  True,
+    "check_on_offset_x":   1324,
+    "check_on_offset_y":   1056,
     "check_on_offset":     [1324, 1056],
     # ── 미확인 좌표 (직접 측정 후 입력) ──
     "coord_a":         [0, 0],
@@ -231,6 +233,8 @@ _NUM_KEYS = {
     "f9_pet_interval":     int,
     "max_box":             int,
     "box28_confidence_set": float,
+    "check_on_offset_x":   int,
+    "check_on_offset_y":   int,
     "search_confidence":   float,
     "count_confidence":    float,
     "speed_confidence":    float,
@@ -2152,14 +2156,23 @@ class Macro:
                         log.info("⌨️ [자동판매] '3' 키 입력")
                         self.inp.press("3")
                         time.sleep(0.5)
-                        cx, cy = self._abs_coord("check_on_offset")
+                        _off = self.cfg.get("check_on_offset", [0, 0])
+                        if _off and (_off[0] != 0 or _off[1] != 0):
+                            cx, cy = self._abs_coord("check_on_offset")
+                        else:
+                            cx, cy = self._abs_xy("check_on_offset_x", "check_on_offset_y")
                         pyautogui.moveTo(cx, cy)
                         time.sleep(0.4)
                         if self.finder.find("on", ON_CONF, cmd_reg):
-                            log.info("✅ [자동판매] ON 확인 → 설정 완료")
+                            log.info("✅ [자동판매] 이미 ON 상태 → 설정 완료")
                         else:
-                            log.info("⌨️ [자동판매] ON 미감지 → A키 입력")
-                            self.inp.press("a")
+                            log.info("🖱️ [자동판매] ON 꺼짐 → 좌클릭으로 ON 설정")
+                            pyautogui.click(cx, cy)
+                            time.sleep(0.3)
+                            if self.finder.find("on", ON_CONF, cmd_reg):
+                                log.info("✅ [자동판매] ON 켜짐 확인 → 설정 완료")
+                            else:
+                                log.warning("⚠️ [자동판매] ON 켜짐 미확인")
                         is_auto_sell_set = True
                         time.sleep(0.5)
                         continue
