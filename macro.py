@@ -1971,20 +1971,34 @@ class Macro:
         img = cv2.cvtColor(np.array(shot), cv2.COLOR_RGB2GRAY)
         _, img = cv2.threshold(img, 0, 255, cv2.THRESH_BINARY | cv2.THRESH_OTSU)
         img = cv2.resize(img, (ocr_w * 3, ocr_h * 3), interpolation=cv2.INTER_CUBIC)
-        try:
-            ocr_text = pytesseract.image_to_string(
-                _PILImage.fromarray(img), lang="kor+eng", config="--oem 3 --psm 7"
-            ).strip()
-        except Exception:
-            ocr_text = pytesseract.image_to_string(
-                _PILImage.fromarray(img),
-                config="--psm 7 -c tessedit_char_whitelist=0123456789,.: "
-            ).strip()
-            log.info("📋 [보스선택] 한글 OCR 불가 → 숫자 전용 fallback: %r", ocr_text)
-            if not any(c.isdigit() for c in ocr_text):
+        # psm7 먼저, 만 단위(0~9999) 범위 초과 시 psm8 재시도
+        pil_img = _PILImage.fromarray(img)
+        ocr_text = ""
+        for _cfg in ["--oem 3 --psm 7", "--oem 3 --psm 8"]:
+            try:
+                _t = pytesseract.image_to_string(pil_img, lang="kor+eng", config=_cfg).strip()
+            except Exception:
+                _t = ""
+            log.info("📋 [보스선택] OCR [%s]: %r", _cfg.split()[-1], _t)
+            if not _t:
+                continue
+            _m만 = re.search(r'([\d,]+)\s*만', _t)
+            _만_val = int(_m만.group(1).replace(',', '')) if _m만 else -1
+            if 0 <= _만_val <= 9999:
+                ocr_text = _t
+                break
+            if not ocr_text:
+                ocr_text = _t
+        if not ocr_text:
+            try:
                 ocr_text = pytesseract.image_to_string(
-                    _PILImage.fromarray(img), config="--psm 7"
+                    pil_img, config="--psm 7 -c tessedit_char_whitelist=0123456789,.: "
                 ).strip()
+                log.info("📋 [보스선택] 한글 OCR 불가 → 숫자 전용 fallback: %r", ocr_text)
+                if not any(c.isdigit() for c in ocr_text):
+                    ocr_text = pytesseract.image_to_string(pil_img, config="--psm 7").strip()
+            except Exception:
+                pass
         log.info("📋 [보스선택] 딜량 OCR: %r", ocr_text)
 
         party_dps = self._parse_dps_억(ocr_text)
