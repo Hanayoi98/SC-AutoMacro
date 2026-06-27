@@ -212,6 +212,7 @@ DEFAULT_CONFIG: dict = {
     # ── 게임모드 ──
     "gamemode_host_on":       False,
     "host_username":          "Hanayoi",
+    "host_confidence":        0.65,
     "game_end_on":            False,
     "auto_boss_select_on":    False,
     "boss_loop_rx":           0.2677,
@@ -843,6 +844,7 @@ class SettingsWindow:
         rows_host = [
             ("방장모드 사용",   "gamemode_host_on", "bool"),
             ("유저 닉네임",     "host_username",    "str"),
+            ("닉네임 인식률",   "host_confidence",  "num"),
         ]
         self._cfg_rows(f, rows_host)
 
@@ -1678,7 +1680,7 @@ class Macro:
         self._f11thr.start()
 
     def _host_loop(self) -> None:
-        HOST_CONF = 0.65
+        HOST_CONF = float(self.cfg.get("host_confidence", 0.65))
 
         def _full():
             hwnd = _sc_find_hwnd()
