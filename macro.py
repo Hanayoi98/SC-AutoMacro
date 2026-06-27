@@ -2353,9 +2353,14 @@ class Macro:
             if e.name == "f9":
                 held = time.time() - self._f9_press_time
                 self._f9_held = False
-                if held >= 4.0 and self._game_end_mode:
-                    log.info("🔄 [F9 장누름] 게임종료 모드 초기화")
-                    self._game_end_mode = False
+                if held >= 4.0 and self._f9thr and self._f9thr.is_alive():
+                    if self._game_end_mode:
+                        log.info("🔄 [F9 장누름] 게임종료 대기 → 일반 모드")
+                        self._game_end_mode = False
+                        self._boss_select_active = False
+                    else:
+                        log.info("🔄 [F9 장누름] 일반 → 게임종료 대기 모드")
+                        self._game_end_mode = True
                 else:
                     threading.Thread(target=self.f9, daemon=True).start()
 
