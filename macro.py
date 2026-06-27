@@ -2162,7 +2162,7 @@ class Macro:
                         time.sleep(0.4)
                         if self.finder.find("on", ON_CONF, cmd_reg):
                             log.info("✅ [자동판매] ON 확인 → 설정 완료")
-                            self.inp.press("escape")
+                            self.inp.press("3")
                             is_auto_sell_set = True
                         else:
                             log.info("⌨️ [자동판매] ON 미감지 → A키 입력")
@@ -2170,11 +2170,11 @@ class Macro:
                             time.sleep(0.3)
                             if self.finder.find("on", ON_CONF, cmd_reg):
                                 log.info("✅ [자동판매] ON 확인 → 설정 완료")
-                                self.inp.press("escape")
+                                self.inp.press("3")
                                 is_auto_sell_set = True
                             else:
                                 log.warning("⚠️ [자동판매] ON 재확인 실패 → 메뉴 닫고 재시도")
-                                self.inp.press("escape")
+                                self.inp.press("3")
                         time.sleep(0.5)
                         continue
 
