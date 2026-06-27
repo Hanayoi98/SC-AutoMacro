@@ -1809,15 +1809,15 @@ class Macro:
             log.warning("⚠️ [보스선택] SelectBoss_0 미감지 → 중단")
             return
 
-        # 3. 파티 딜량 OCR (SelectBoss_0 행 전체)
+        # 3. 파티 딜량 OCR (템플릿 위치 기준, 텍스트 영역만 크롭)
         gx, gy, gw, gh = reg
-        ocr_x = max(0, int(gx + gw * 0.20))
-        ocr_y = max(0, int(sb0[1]) - 18)
-        ocr_w = int(gw * 0.60)
-        ocr_h = 36
+        ocr_x = max(0, int(sb0[0]))
+        ocr_y = max(0, int(sb0[1]) - 5)
+        ocr_w = min(int(gw * 0.44), int(gx + gw) - ocr_x)  # ~700px at 1630 base
+        ocr_h = 40
         shot = pyautogui.screenshot(region=(ocr_x, ocr_y, ocr_w, ocr_h))
         img = cv2.cvtColor(np.array(shot), cv2.COLOR_RGB2GRAY)
-        _, img = cv2.threshold(img, 100, 255, cv2.THRESH_BINARY)
+        _, img = cv2.threshold(img, 0, 255, cv2.THRESH_BINARY | cv2.THRESH_OTSU)
         img = cv2.resize(img, (ocr_w * 2, ocr_h * 2), interpolation=cv2.INTER_CUBIC)
         try:
             ocr_text = pytesseract.image_to_string(
