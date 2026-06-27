@@ -1267,6 +1267,8 @@ class Macro:
         self._host_stop = threading.Event()
         self._f11thr: Optional[threading.Thread] = None
         self._game_end_mode = False
+        self._SC_SHOT_DIR   = self._find_sc_shot_dir()
+        log.info("📁 스크린샷 폴더: %s", self._SC_SHOT_DIR)
         self.ui: Optional[ConfigUI] = None   # 설정 UI (start() 에서 생성)
 
     def save_config(self) -> None:
@@ -1653,7 +1655,32 @@ class Macro:
     # ─────────────────────────────────────
     # 게임 종료 루프
     # ─────────────────────────────────────
-    _SC_SHOT_DIR = r"C:\Users\sicar\OneDrive\문서\StarCraft\Screenshots"
+    @staticmethod
+    def _find_sc_shot_dir() -> str:
+        """StarCraft 스크린샷 폴더를 자동 탐색 (OneDrive 리디렉션 포함)."""
+        import ctypes, ctypes.wintypes
+        # SHGetFolderPathW로 실제 내 문서 경로 획득 (OneDrive 리디렉션 자동 반영)
+        try:
+            buf = ctypes.create_unicode_buffer(ctypes.wintypes.MAX_PATH)
+            ctypes.windll.shell32.SHGetFolderPathW(None, 5, None, 0, buf)
+            docs = buf.value
+        except Exception:
+            docs = os.path.expanduser("~\\Documents")
+
+        home = os.path.expanduser("~")
+        candidates = [
+            os.path.join(docs, "StarCraft", "Screenshots"),
+            os.path.join(home, "Documents", "StarCraft", "Screenshots"),
+            os.path.join(home, "OneDrive", "문서", "StarCraft", "Screenshots"),
+            os.path.join(home, "OneDrive", "Documents", "StarCraft", "Screenshots"),
+        ]
+        for path in candidates:
+            if os.path.isdir(path):
+                return path
+        # 폴더가 없으면 내 문서 기준 경로 반환 (게임 최초 실행 전)
+        return os.path.join(docs, "StarCraft", "Screenshots")
+
+    _SC_SHOT_DIR: str = ""   # 런타임에 _find_sc_shot_dir()로 초기화
 
     def _game_end_check(self, reg, is_active: bool) -> tuple:
         """
