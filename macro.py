@@ -1972,7 +1972,9 @@ class Macro:
         img = cv2.cvtColor(np.array(shot), cv2.COLOR_RGB2GRAY)
         _, img = cv2.threshold(img, 0, 255, cv2.THRESH_BINARY | cv2.THRESH_OTSU)
         img = cv2.resize(img, (ocr_w * 3, ocr_h * 3), interpolation=cv2.INTER_CUBIC)
-        # psm7 먼저, 만 단위(0~9999) 범위 초과 시 psm8 재시도
+        # psm7 먼저, 아래 조건 중 하나라도 해당되면 psm8 재시도
+        #   ① 만 값 > 9999 (노이즈로 자릿수 증가)
+        #   ② 억이 OCR에 있으나 digit 직전 매칭 실패 (예: "11 디 억" → "9"→"디" 오인식)
         pil_img = _PILImage.fromarray(img)
         ocr_text = ""
         for _cfg in ["--oem 3 --psm 7", "--oem 3 --psm 8"]:
@@ -1985,7 +1987,15 @@ class Macro:
                 continue
             _m만 = re.search(r'([\d,]+)\s*만', _t)
             _만_val = int(_m만.group(1).replace(',', '')) if _m만 else -1
-            if 0 <= _만_val <= 9999:
+            _m억_direct = re.search(r'([\d,]+)\s*억', _t)
+            _억_exists = '억' in _t
+            # 채택 조건: (억 직접 매칭 성공 + 만 유효/없음) OR (억 없음 + 만 유효)
+            _valid = (_m억_direct is not None and (not _m만 or 0 <= _만_val <= 9999)) or \
+                     (_m억_direct is None and not _억_exists and 0 <= _만_val <= 9999)
+            # 억 없고 만도 없지만 억 직접 매칭 성공 (만 없는 단일 억 케이스)
+            if not _m만 and _m억_direct:
+                _valid = True
+            if _valid:
                 ocr_text = _t
                 break
             if not ocr_text:
