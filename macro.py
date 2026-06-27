@@ -1924,18 +1924,19 @@ class Macro:
         player_count = max(1, len(usernames))
         log.info("🎯 [보스선택] 인원 수: %d인", player_count)
 
-        # 2. SelectBoss_0 위치 확인
-        sb0 = self.finder.find("SelectBoss_0", 0.75, reg)
-        if sb0 is None:
+        # 2. SelectBoss_0 위치 확인 (find_box → 우측 끝 좌표 획득)
+        sb0_box = self.finder.find_box("SelectBoss_0", 0.75, reg)
+        if sb0_box is None:
             log.warning("⚠️ [보스선택] SelectBoss_0 미감지 → 중단")
             return
 
-        # 3. 파티 딜량 OCR (템플릿 위치 기준, 텍스트 영역만 크롭)
+        # 3. 파티 딜량 OCR (템플릿 우측 끝에서 시작 → 딜량 숫자 영역만 크롭)
         gx, gy, gw, gh = reg
-        ocr_x = max(0, int(sb0[0]))
-        ocr_y = max(0, int(sb0[1]) - 5)
-        ocr_w = min(int(gw * 0.44), int(gx + gw) - ocr_x)  # ~700px at 1630 base
-        ocr_h = 40
+        sb0_left, sb0_top, sb0_w, sb0_h = sb0_box
+        ocr_x = max(0, sb0_left + sb0_w)        # 템플릿 우측 끝
+        ocr_y = max(0, sb0_top - 5)
+        ocr_w = min(500, int(gx + gw) - ocr_x)  # 숫자 영역 최대 500px
+        ocr_h = sb0_h + 10
         shot = pyautogui.screenshot(region=(ocr_x, ocr_y, ocr_w, ocr_h))
         img = cv2.cvtColor(np.array(shot), cv2.COLOR_RGB2GRAY)
         _, img = cv2.threshold(img, 0, 255, cv2.THRESH_BINARY | cv2.THRESH_OTSU)
@@ -1945,13 +1946,11 @@ class Macro:
                 _PILImage.fromarray(img), lang="kor+eng", config="--psm 7"
             ).strip()
         except Exception:
-            # kor 언어팩 없을 때: 숫자+기호 화이트리스트로 fallback
             ocr_text = pytesseract.image_to_string(
                 _PILImage.fromarray(img),
                 config="--psm 7 -c tessedit_char_whitelist=0123456789,.: "
             ).strip()
             log.info("📋 [보스선택] 한글 OCR 불가 → 숫자 전용 fallback: %r", ocr_text)
-            # fallback 결과가 없으면 eng로 재시도
             if not any(c.isdigit() for c in ocr_text):
                 ocr_text = pytesseract.image_to_string(
                     _PILImage.fromarray(img), config="--psm 7"
@@ -1989,23 +1988,21 @@ class Macro:
         log.info("🏆 [보스선택] 선택: %s %s (HP %.2f억)",
                  DIFF_NAMES[diff_idx], BOSS_NAMES[boss_idx], hp_val)
 
-        # 5. 이지알카 초기화 (A×10 + Q×10)
-        log.info("🔄 [보스선택] 이지알카 초기화")
-        for _ in range(10):
-            self.inp.press("a", 0.12)
-        for _ in range(10):
-            self.inp.press("q", 0.12)
-        time.sleep(0.5)
+        # 5. SC 창 포그라운드 전환 후 키 입력
+        hwnd = _sc_find_hwnd()
+        if hwnd:
+            _u32.SetForegroundWindow(hwnd)
+            time.sleep(0.3)
 
-        # 6. 보스 이동 (S × boss_idx) — 보스 이동 시 난이도 이지로 초기화됨
+        # 6. 보스 이동 (S × boss_idx)
         for i in range(boss_idx):
             log.info("➡️ [보스선택] S (%d/%d)", i + 1, boss_idx)
-            self.inp.press("s", 0.3)
+            self.inp.press("s", 0.4)
 
         # 7. 난이도 설정 (W × diff_idx)
         for i in range(diff_idx):
             log.info("⬆️ [보스선택] W (%d/%d)", i + 1, diff_idx)
-            self.inp.press("w", 0.3)
+            self.inp.press("w", 0.4)
 
         log.info("✅ [보스선택] 완료 → %s %s 대기 (L은 수동 입력)",
                  DIFF_NAMES[diff_idx], BOSS_NAMES[boss_idx])
