@@ -1745,11 +1745,34 @@ class Macro:
     @staticmethod
     def _parse_dps_억(text: str) -> float:
         import re
+        # 1차: 정상 파싱 (한글 OCR 성공 시)
         m억 = re.search(r'([\d,]+)\s*억', text)
         m만 = re.search(r'([\d,]+)\s*만', text)
-        억_val = float(m억.group(1).replace(',', '')) if m억 else 0.0
-        만_val = float(m만.group(1).replace(',', '')) / 10000.0 if m만 else 0.0
-        return 억_val + 만_val
+        if m억:
+            억_val = float(m억.group(1).replace(',', ''))
+            만_val = float(m만.group(1).replace(',', '')) / 10000.0 if m만 else 0.0
+            return 억_val + 만_val
+
+        # 2차: 한글 OCR 실패 시 — 콜론 뒤 숫자만 추출
+        # 예: 'AF ILE) 2 Get: 7980 Bageut fo' → ':' 뒤 숫자 [7980]
+        after_colon = re.split(r':', text)[-1]
+        nums = [int(n.replace(',', '')) for n in re.findall(r'[\d,]+', after_colon) if n.replace(',', '')]
+        if not nums:
+            nums = [int(n.replace(',', '')) for n in re.findall(r'[\d,]+', text) if n.replace(',', '')]
+
+        if len(nums) >= 2:
+            n1, n2 = nums[0], nums[1]
+            # 두 수가 '억 만' 형태로 분리된 경우
+            if 1 <= n1 <= 99999 and 0 <= n2 <= 9999:
+                return n1 + n2 / 10000.0
+        if len(nums) >= 1:
+            n = nums[0]
+            if 1 <= n <= 99999:          # 억 단위로 해석
+                return float(n)
+            if 10000 < n <= 999999999:   # 만 단위로 해석 (예: 79803100만)
+                return n / 10000.0
+
+        return 0.0
 
     def _auto_boss_select(self, reg) -> None:
         """
@@ -1801,9 +1824,17 @@ class Macro:
                 _PILImage.fromarray(img), lang="kor+eng", config="--psm 7"
             ).strip()
         except Exception:
+            # kor 언어팩 없을 때: 숫자+기호 화이트리스트로 fallback
             ocr_text = pytesseract.image_to_string(
-                _PILImage.fromarray(img), config="--psm 7"
+                _PILImage.fromarray(img),
+                config="--psm 7 -c tessedit_char_whitelist=0123456789,.: "
             ).strip()
+            log.info("📋 [보스선택] 한글 OCR 불가 → 숫자 전용 fallback: %r", ocr_text)
+            # fallback 결과가 없으면 eng로 재시도
+            if not any(c.isdigit() for c in ocr_text):
+                ocr_text = pytesseract.image_to_string(
+                    _PILImage.fromarray(img), config="--psm 7"
+                ).strip()
         log.info("📋 [보스선택] 딜량 OCR: %r", ocr_text)
 
         party_dps = self._parse_dps_억(ocr_text)
