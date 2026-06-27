@@ -33,19 +33,22 @@
      둘 중 하나라도 없으면 → sleep(0.12) → continue
      sx, sy = seal 중심 / tx, ty = target 중심
 
-③ [초반 분기] (f9_early_branch_on=True, is_auto_sell_set 무관)
-     seal 좌클릭 (sx, sy) → sleep(0.2)
+③ [초반 분기] (f9_early_branch_on=True)
+     seal 좌클릭 (sx, sy) → sleep(0.05)
 
      speed3 감지 (SPEED3_CONF=0.78, info_reg):
-       key 있음 (KEY_CONF=0.78, field_reg) →
-         key 좌클릭 + target 우클릭 (inp.click / inp.rclick) → sleep(1.0) → continue
-       key 없음 → sleep(0.5) → continue
+       is_auto_sell_set=False →
+         key 탐색 (KEY_CONF=0.78, field_reg)
+         key 있음 → key 좌클릭 + target 우클릭 → sleep(1.0) → continue
+         key 없음 → 변환루트 fall-through (④ 로 계속)
+       is_auto_sell_set=True → 변환루트 fall-through (④ 로 계속)
 
      speed2 감지 (SPEED2_CONF=0.93, info_reg):
-       25box / 26box / 27box 중 하나라도 있으면 → continue (변환 스킵)
-       박스 없음 + key 있음 →
-         key 좌클릭 + target 우클릭 → sleep(1.0) → continue
-       박스 없음 + key 없음 → sleep(0.5) → continue
+       is_auto_sell_set=False →
+         key 탐색 (KEY_CONF=0.78, field_reg)
+         key 있음 → key 좌클릭 + target 우클릭 → sleep(1.0) → continue
+         key 없음 → 변환루트 fall-through (④ 로 계속)
+       is_auto_sell_set=True → 변환루트 fall-through (④ 로 계속)
 
      speed2/3 모두 없음 → ④ 로 계속
 
@@ -237,3 +240,5 @@ F9 루프 내에서 동작. `game_end_on=True` 일 때 활성화.
 _최종 업데이트: 2026-06-27 — v1.1: F11 방장모드 추가 (OCR 닉네임 전원 확인 후 Host_4 클릭) / Host_3 템플릿 슬롯 블랙아웃 처리 / difflib 유사도 매칭 적용_
 
 _최종 업데이트: 2026-06-27 — v1.3: 게임종료 루프 추가 (SelectBoss_0→BossClear_2→종료 시퀀스) / F9 루프 게임종료 모드 전환 구조 / f10 내부명 → f11/gamemode 리네임 / print screen 키명 수정 / 👑 방장설정 버튼 메인창 추가_
+
+_최종 업데이트: 2026-06-28 — v1.4: 초반분기 is_auto_sell_set 분기 추가 (True 시 열쇠탐색 없이 변환루트 / False+열쇠없음 시 변환루트) / _NUM_KEYS에 boss_loop_rx/ry/rw/rh, host_confidence 추가 / boss_loop_r* float() 변환 누락 수정_
