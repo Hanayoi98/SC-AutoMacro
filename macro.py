@@ -1793,8 +1793,8 @@ class Macro:
         self.inp.press("enter"); time.sleep(0.5)
 
         if self.cfg.get("gamemode_host_on", False):
-            log.info("♟️ [종료] 방장모드 ON → F11 입력")
-            self.inp.press("f11")
+            log.info("♟️ [종료] 방장모드 ON → F11 직접 호출")
+            threading.Thread(target=self.f11, daemon=True).start()
 
         log.info("✅ [종료] 게임 종료 시퀀스 완료")
         return False, True   # 시퀀스 완료 후 비활성화
