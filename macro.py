@@ -2149,6 +2149,11 @@ class Macro:
                 if self.cfg.get("f9_box28_monitor_on", True) and not is_auto_sell_set:
                     if self.finder.find(f"{max_box}box", b28_conf, box_reg):
                         log.info("📦 [%d상자 발견] 자동 판매 설정 시작", max_box)
+                        _off = self.cfg.get("check_on_offset", [0, 0])
+                        if not _off or (_off[0] == 0 and _off[1] == 0):
+                            log.warning("⚠️ [자동판매] check_on_offset 미설정 → 자동판매 설정 건너뜀")
+                            is_auto_sell_set = True
+                            continue
                         log.info("⌨️ [자동판매] '3' 키 입력")
                         self.inp.press("3")
                         time.sleep(0.5)
@@ -2157,10 +2162,19 @@ class Macro:
                         time.sleep(0.4)
                         if self.finder.find("on", ON_CONF, cmd_reg):
                             log.info("✅ [자동판매] ON 확인 → 설정 완료")
+                            self.inp.press("escape")
+                            is_auto_sell_set = True
                         else:
                             log.info("⌨️ [자동판매] ON 미감지 → A키 입력")
                             self.inp.press("a")
-                        is_auto_sell_set = True
+                            time.sleep(0.3)
+                            if self.finder.find("on", ON_CONF, cmd_reg):
+                                log.info("✅ [자동판매] ON 확인 → 설정 완료")
+                                self.inp.press("escape")
+                                is_auto_sell_set = True
+                            else:
+                                log.warning("⚠️ [자동판매] ON 재확인 실패 → 메뉴 닫고 재시도")
+                                self.inp.press("escape")
                         time.sleep(0.5)
                         continue
 
