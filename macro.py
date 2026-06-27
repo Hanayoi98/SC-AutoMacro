@@ -1444,6 +1444,8 @@ class Macro:
         self._host_stop = threading.Event()
         self._f11thr: Optional[threading.Thread] = None
         self._game_end_mode = False
+        self._f9_press_time = 0.0
+        self._f9_held = False
         self._SC_SHOT_DIR   = self._find_sc_shot_dir()
         log.info("📁 스크린샷 폴더: %s", self._SC_SHOT_DIR)
         self.ui: Optional[ConfigUI] = None   # 설정 UI (start() 에서 생성)
@@ -2313,12 +2315,30 @@ class Macro:
         keyboard.add_hotkey("f6",        spawn(self.f6))
         keyboard.add_hotkey("f7",        spawn(self.f7))
         keyboard.add_hotkey("f8",        spawn(self.f8))
-        keyboard.add_hotkey("f9",        spawn(self.f9))
         keyboard.add_hotkey("f11",       spawn(self.f11))
         keyboard.add_hotkey("ctrl+f12",  self._quit)
         keyboard.add_hotkey("ctrl+f11",
                             lambda: self.root.after(0, self.ui.toggle)
                             if self.ui else None)
+
+        # F9 장누름 감지 (3초 이상 + 게임종료 모드 → 초기화)
+        def _on_f9_press(e):
+            if e.name == "f9" and not self._f9_held:
+                self._f9_press_time = time.time()
+                self._f9_held = True
+
+        def _on_f9_release(e):
+            if e.name == "f9":
+                held = time.time() - self._f9_press_time
+                self._f9_held = False
+                if held >= 3.0 and self._game_end_mode:
+                    log.info("🔄 [F9 장누름] 게임종료 모드 초기화")
+                    self._game_end_mode = False
+                else:
+                    threading.Thread(target=self.f9, daemon=True).start()
+
+        keyboard.on_press(_on_f9_press)
+        keyboard.on_release(_on_f9_release)
 
         log.info("단축키 등록 완료.")
 
