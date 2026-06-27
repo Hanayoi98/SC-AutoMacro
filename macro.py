@@ -1670,10 +1670,6 @@ class Macro:
     # F9: 메인 루프 시작/정지
     # ─────────────────────────────────────
     def f9(self) -> None:
-        if not is_sc_active():
-            log.warning("F9: 스타크래프트 비활성 - 무시")
-            return
-
         if self._f9thr and self._f9thr.is_alive():
             log.info("═══ F9 정지 요청 ═══")
             self._stop.set()
