@@ -2003,21 +2003,27 @@ class Macro:
         log.info("🏆 [보스선택] 선택: %s %s (HP %.2f억)",
                  DIFF_NAMES[diff_idx], BOSS_NAMES[boss_idx], hp_val)
 
-        # 5. SC 창 포그라운드 전환 후 키 입력
+        # 5. SC 창 강제 포그라운드 전환 (AttachThreadInput 트릭) 후 키 입력
         hwnd = _sc_find_hwnd()
         if hwnd:
+            cur = _u32.GetForegroundWindow()
+            cur_tid = _u32.GetWindowThreadProcessId(cur, None)
+            tgt_tid = _u32.GetWindowThreadProcessId(hwnd, None)
+            _u32.AttachThreadInput(cur_tid, tgt_tid, True)
             _u32.SetForegroundWindow(hwnd)
+            _u32.BringWindowToTop(hwnd)
+            _u32.AttachThreadInput(cur_tid, tgt_tid, False)
             time.sleep(0.3)
 
         # 6. 보스 이동 (S × boss_idx)
         for i in range(boss_idx):
             log.info("➡️ [보스선택] S (%d/%d)", i + 1, boss_idx)
-            self.inp.press("s", 0.4)
+            self.inp.press("s", 0.5)
 
         # 7. 난이도 설정 (W × diff_idx)
         for i in range(diff_idx):
             log.info("⬆️ [보스선택] W (%d/%d)", i + 1, diff_idx)
-            self.inp.press("w", 0.4)
+            self.inp.press("w", 0.5)
 
         log.info("✅ [보스선택] 완료 → %s %s 대기 (L은 수동 입력)",
                  DIFF_NAMES[diff_idx], BOSS_NAMES[boss_idx])
