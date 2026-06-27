@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-StarCraft Auto Macro v1.2
+StarCraft Auto Macro v1.3
 이미지 인식 기반 스타크래프트 자동화 매크로
 
 단축키
@@ -201,9 +201,10 @@ DEFAULT_CONFIG: dict = {
     "step_delay":        0.2,
     "key_speed_delay":   1.0,
     "window_size":       [0, 0],
-    # ── F11 방장모드 ──
-    "f10_host_mode_on":  False,
+    # ── 게임모드 ──
+    "gamemode_host_on":  False,
     "host_username":     "Hanayoi",
+    "game_end_on":       False,
     # ── F7 전용 딜레이 ──
     "f7_input_delay":    0.15,
     "f7_step_delay":     0.2,
@@ -696,12 +697,13 @@ class SettingsWindow:
 
         nb = tk.ttk.Notebook(self.win)
         nb.pack(fill="both", expand=True, padx=8, pady=8)
+        self._nb = nb
 
         self._tab_window(nb)
         self._tab_coords(nb)
         self._tab_f6(nb)
         self._tab_f9(nb)
-        self._tab_f10(nb)
+        self._tab_gamemode(nb)
         self._tab_advanced1(nb)
         self._tab_advanced2(nb)
 
@@ -774,15 +776,22 @@ class SettingsWindow:
         ]
         self._cfg_rows(f, rows)
 
-    # ── 탭 5: F11 방장모드 ───────────────────────
-    def _tab_f10(self, nb):
-        f = self._frame(nb); nb.add(f, text=" F11 방장 ")
+    # ── 탭 5: 게임모드 ───────────────────────────
+    def _tab_gamemode(self, nb):
+        f = self._frame(nb); nb.add(f, text=" 게임모드 ")
         self._lbl(f, "[ 방장모드 (F11 토글) ]", bold=True, fg=self.C_ACC).pack(anchor="w", pady=(8,2), padx=10)
-        rows = [
-            ("방장모드 사용",   "f10_host_mode_on", "bool"),
+        rows_host = [
+            ("방장모드 사용",   "gamemode_host_on", "bool"),
             ("유저 닉네임",     "host_username",    "str"),
         ]
-        self._cfg_rows(f, rows)
+        self._cfg_rows(f, rows_host)
+
+        tk.Frame(f, height=1, bg=self.C_BG3).pack(fill="x", padx=10, pady=(10,4))
+        self._lbl(f, "[ 게임종료 루프 ]", bold=True, fg=self.C_ACC).pack(anchor="w", pady=(4,2), padx=10)
+        rows_end = [
+            ("게임종료 루프 사용", "game_end_on", "bool"),
+        ]
+        self._cfg_rows(f, rows_end)
 
     # ── 탭 6: 고급1 (딜레이) ─────────────────────
     def _tab_advanced1(self, nb):
@@ -934,6 +943,10 @@ class SettingsWindow:
         self.win.deiconify()
         self.win.lift()
 
+    def show_tab(self, index: int):
+        self.show()
+        self._nb.select(index)
+
 
 # ──────────────────────────────────────────────────────────
 class ConfigUI:
@@ -967,7 +980,7 @@ class ConfigUI:
 
     def _build(self):
         r = self.root
-        r.title("SC Auto Macro  v1.2")
+        r.title("SC Auto Macro  v1.3")
         r.configure(bg=self.C_BG)
         r.attributes("-topmost", True)
         r.resizable(False, False)
@@ -989,7 +1002,7 @@ class ConfigUI:
 
         ver_frame = tk.Frame(hdr, bg=self.C_BG3, padx=8, pady=4)
         ver_frame.pack(side="right", padx=16, pady=10)
-        tk.Label(ver_frame, text="v1.2", font=("Malgun Gothic",10,"bold"),
+        tk.Label(ver_frame, text="v1.3", font=("Malgun Gothic",10,"bold"),
                  bg=self.C_BG3, fg=self.C_ACC).pack()
 
         # ── 상태 표시 카드 ───────────────
@@ -1037,16 +1050,22 @@ class ConfigUI:
                                   command=self._toggle_f9)
         self._f9_btn.pack(side="left", padx=(0,6), fill="x", expand=True)
 
-        self._f10_btn = tk.Button(row1, text="♟  F11 방장", font=self.FONTB,
+        self._f11_btn = tk.Button(row1, text="♟  F11 방장", font=self.FONTB,
                                    bg=self.C_BG3, fg=self.C_PINK,
                                    relief="flat", padx=14, pady=7,
                                    activebackground=self.C_BG4,
                                    cursor="hand2",
-                                   command=self._toggle_f10)
-        self._f10_btn.pack(side="left", fill="x", expand=True)
+                                   command=self._toggle_f11)
+        self._f11_btn.pack(side="left", fill="x", expand=True)
 
         # ── 버튼 행 2: 서브 컨트롤 ───────
         row2 = tk.Frame(r, bg=self.C_BG); row2.pack(padx=12, pady=(0,10), fill="x")
+
+        tk.Button(row2, text="👑  방장설정", font=self.FONTS,
+                  bg=self.C_BG3, fg="#f9e2af",
+                  relief="flat", padx=10, pady=5,
+                  activebackground=self.C_BG4, cursor="hand2",
+                  command=self._open_gamemode_settings).pack(side="left", padx=(0,4), fill="x", expand=True)
 
         tk.Button(row2, text="⚙  설정", font=self.FONTS,
                   bg=self.C_BG3, fg=self.C_FG,
@@ -1103,8 +1122,8 @@ class ConfigUI:
     def _toggle_f9(self):
         threading.Thread(target=self.macro.f9, daemon=True).start()
 
-    def _toggle_f10(self):
-        threading.Thread(target=self.macro.f10, daemon=True).start()
+    def _toggle_f11(self):
+        threading.Thread(target=self.macro.f11, daemon=True).start()
 
     def _open_settings(self):
         if self._settings is None:
@@ -1112,14 +1131,25 @@ class ConfigUI:
         else:
             self._settings.show()
 
+    def _open_gamemode_settings(self):
+        if self._settings is None:
+            self._settings = SettingsWindow(self.macro, self.root)
+        self._settings.show_tab(4)
+
     def _poll(self):
         """500ms 마다 F9 상태 + 로그 큐 일괄 갱신"""
         # F9 상태
         if self.macro._f9thr and self.macro._f9thr.is_alive():
-            self._status_sv.set("실행 중")
-            self._status_dot.configure(fg=self.C_GREEN)
-            self._f9_btn.configure(text="■  F9 정지", bg=self.C_RED, fg="#1e1e2e",
-                                   activebackground="#f5a0b0")
+            if self.macro._game_end_mode:
+                self._status_sv.set("게임 종료 대기")
+                self._status_dot.configure(fg="#f9e2af")
+                self._f9_btn.configure(text="■  종료 감지 중", bg=self.C_RED, fg="#1e1e2e",
+                                       activebackground="#f5a0b0")
+            else:
+                self._status_sv.set("실행 중")
+                self._status_dot.configure(fg=self.C_GREEN)
+                self._f9_btn.configure(text="■  F9 정지", bg=self.C_RED, fg="#1e1e2e",
+                                       activebackground="#f5a0b0")
         else:
             self._status_sv.set("정지 중")
             self._status_dot.configure(fg=self.C_RED)
@@ -1127,12 +1157,12 @@ class ConfigUI:
                                    activebackground="#b9f0c6")
 
         # F11 방장모드 상태
-        if self.macro._f10thr and self.macro._f10thr.is_alive():
+        if self.macro._f11thr and self.macro._f11thr.is_alive():
             self._host_dot.configure(fg=self.C_PINK)
-            self._f10_btn.configure(text="■  F11 방장 정지", fg=self.C_RED)
+            self._f11_btn.configure(text="■  F11 방장 정지", fg=self.C_RED)
         else:
             self._host_dot.configure(fg=self.C_BG4)
-            self._f10_btn.configure(text="♟  F11 방장", fg=self.C_PINK)
+            self._f11_btn.configure(text="♟  F11 방장", fg=self.C_PINK)
 
         # 로그 큐 → 텍스트 위젯 (로그 패널이 열려 있을 때만)
         if self._log_visible:
@@ -1234,8 +1264,9 @@ class Macro:
         self._stop    = threading.Event()
         self._f9thr:  Optional[threading.Thread] = None
         self._pet_t   = 0.0
-        self._f10stop = threading.Event()
-        self._f10thr: Optional[threading.Thread] = None
+        self._host_stop = threading.Event()
+        self._f11thr: Optional[threading.Thread] = None
+        self._game_end_mode = False
         self.ui: Optional[ConfigUI] = None   # 설정 UI (start() 에서 생성)
 
     def save_config(self) -> None:
@@ -1458,14 +1489,14 @@ class Macro:
     # ─────────────────────────────────────
     # F11: 방장모드 시작/정지
     # ─────────────────────────────────────
-    def f10(self) -> None:
-        if not self.cfg.get("f10_host_mode_on", False):
+    def f11(self) -> None:
+        if not self.cfg.get("gamemode_host_on", False):
             log.warning("F11: 방장모드 비활성 (설정에서 활성화 필요)")
             return
 
-        if self._f10thr and self._f10thr.is_alive():
+        if self._f11thr and self._f11thr.is_alive():
             log.info("═══ F11 방장모드 정지 ═══")
-            self._f10stop.set()
+            self._host_stop.set()
             return
 
         if not is_sc_active():
@@ -1473,9 +1504,9 @@ class Macro:
             return
 
         log.info("═══ F11 방장모드 시작 ═══")
-        self._f10stop.clear()
-        self._f10thr = threading.Thread(target=self._host_loop, daemon=True)
-        self._f10thr.start()
+        self._host_stop.clear()
+        self._f11thr = threading.Thread(target=self._host_loop, daemon=True)
+        self._f11thr.start()
 
     def _host_loop(self) -> None:
         HOST_CONF = 0.65
@@ -1518,7 +1549,7 @@ class Macro:
             log.info("🔍 [방장] Step1: Host_1 대기")
             goto_step = 2  # 기본값: Host_1 클릭 후 Step2
             step1_done = False
-            while not self._f10stop.is_set():
+            while not self._host_stop.is_set():
                 time.sleep(0.1)
                 h1 = _find("Host_1")
                 if h1:
@@ -1552,7 +1583,7 @@ class Macro:
             # ── Step 2 ─────────────────────────────────────────
             if goto_step <= 2:
                 log.info("🔍 [방장] Step2: Host_2 대기")
-                while not self._f10stop.is_set():
+                while not self._host_stop.is_set():
                     time.sleep(0.1)
                     # Host_3(OCR 영역) 먼저 확인 → 바로 Step3
                     h3 = _find("Host_3")
@@ -1591,7 +1622,7 @@ class Macro:
             if reg0:
                 log.info("🖥️ [방장] 게임 창 크기: %dx%d", reg0[2], reg0[3])
             log.info("🔍 [방장] Step3: Host_3 OCR 루프 시작 (닉네임: %s)", ", ".join(usernames))
-            while not self._f10stop.is_set():
+            while not self._host_stop.is_set():
                 time.sleep(0.1)
                 h3 = _find("Host_3")
                 if not h3:
@@ -1619,6 +1650,79 @@ class Macro:
 
         log.info("═══ F11 방장모드 종료 ═══")
 
+    # ─────────────────────────────────────
+    # 게임 종료 루프
+    # ─────────────────────────────────────
+    _SC_SHOT_DIR = r"C:\Users\sicar\OneDrive\문서\StarCraft\Screenshots"
+
+    def _game_end_check(self, reg, is_active: bool) -> tuple:
+        """
+        게임종료 루프.
+        - is_active=False : SelectBoss_0 감지 시 True 반환 (활성화)
+        - is_active=True  : BossClear_2 감지 시 종료 시퀀스 실행
+        반환: (새로운 is_active 값, 시퀀스 실행 여부)
+        """
+        import glob as _glob
+
+        if not is_active:
+            # SelectBoss_1 탐색 영역: SelectBoss_1T 기준 노란 박스 비율 (rx=0.2739, ry=0.1682, rw=0.4522, rh=0.4267)
+            gx, gy, gw, gh = reg
+            sb1_reg = (
+                int(gx + gw * 0.2739),
+                int(gy + gh * 0.1682),
+                int(gw * 0.4522),
+                int(gh * 0.4267),
+            )
+            if self.finder.find("SelectBoss_0", 0.80, sb1_reg):
+                log.info("🎮 [종료] SelectBoss_1 감지 → 게임종료 루프 활성화")
+                return True, False
+            return False, False
+
+        # BossClear_2 탐색 영역: BossClear_1T 기준 노란 박스 비율 (rx=0.2677, ry=0.2494, rw=0.4553, rh=0.3024)
+        gx, gy, gw, gh = reg
+        bc2_reg = (
+            int(gx + gw * 0.2677),
+            int(gy + gh * 0.2494),
+            int(gw * 0.4553),
+            int(gh * 0.3024),
+        )
+        # BossClear_2 감지 → 종료 시퀀스
+        if not self.finder.find("BossClear_2", 0.80, bc2_reg):
+            return True, False
+
+        log.info("🏆 [종료] BossClear_2 감지 → 종료 시퀀스 시작")
+
+        # 스크린샷 폴더 감시 시작 (PrtSc 전)
+        before = set(_glob.glob(self._SC_SHOT_DIR + r"\*.png") +
+                     _glob.glob(self._SC_SHOT_DIR + r"\*.bmp"))
+        log.info("📁 [종료] 폴더 감시 시작")
+
+        self.inp.press("print screen")
+        log.info("📸 [종료] PrtSc 입력")
+        time.sleep(1.5)
+
+        # 신규 파일 확인 → 없으면 루프 중단
+        after = set(_glob.glob(self._SC_SHOT_DIR + r"\*.png") +
+                    _glob.glob(self._SC_SHOT_DIR + r"\*.bmp"))
+        new_files = after - before
+        if not new_files:
+            log.warning("⚠️ [종료] 스크린샷 파일 미확인 → 루프 중단")
+            return True, False   # 활성 상태 유지, 시퀀스 미실행
+        log.info("✅ [종료] 스크린샷 확인: %s", os.path.basename(new_files.pop()))
+        time.sleep(0.5)
+        self.inp.press("f10");   time.sleep(0.3)
+        self.inp.press("e");     time.sleep(0.3)
+        self.inp.press("s");     time.sleep(0.3)
+        self.inp.press("q");     time.sleep(3.0)
+        self.inp.press("enter"); time.sleep(0.5)
+
+        if self.cfg.get("gamemode_host_on", False):
+            log.info("♟️ [종료] 방장모드 ON → F11 입력")
+            self.inp.press("f11")
+
+        log.info("✅ [종료] 게임 종료 시퀀스 완료")
+        return False, True   # 시퀀스 완료 후 비활성화
+
     def _f9_loop(self) -> None:
         # macro.exe 추출 정확도 상수
         SEAL_CONF   = 0.75
@@ -1633,6 +1737,7 @@ class Macro:
         KEY_CONF    = 0.78
 
         is_auto_sell_set = False
+        self._game_end_mode = False
 
         while not self._stop.is_set():
             try:
@@ -1646,6 +1751,23 @@ class Macro:
                     time.sleep(1)
                     continue
 
+                full_reg = (gx, gy, gw, gh)
+
+                # ── 게임종료 모드: BossClear_2 전담 탐색 ──
+                if self._game_end_mode:
+                    try:
+                        _, did_end = self._game_end_check(full_reg, True)
+                    except Exception as e:
+                        log.error("[종료] 게임종료 루프 오류: %s", e, exc_info=True)
+                        time.sleep(1.0)
+                        continue
+                    if did_end:
+                        log.info("🔴 [종료] 게임종료 완료 → F9 루프 종료")
+                        self._stop.set()
+                        break
+                    time.sleep(0.12)
+                    continue
+
                 self._pet_upgrade_check()
                 if self._stop.is_set():
                     break
@@ -1655,8 +1777,15 @@ class Macro:
                 info_reg  = (int(gx + gw*0.25), int(gy + gh*0.75), int(gw*0.45), int(gh*0.23))
                 cmd_reg   = (int(gx + gw*0.65), int(gy + gh*0.65), int(gw*0.35), int(gh*0.35))
                 field_reg = (gx + 50, gy + 50, gw - 100, gh - 250)
-                full_reg  = (gx, gy, gw, gh)
                 b28_conf  = self.cfg.get("box28_confidence_set", 0.93)
+
+                # ── 게임종료 루프 (SelectBoss_0 감지) ─────
+                if self.cfg.get("game_end_on", False):
+                    active, _ = self._game_end_check(full_reg, False)
+                    if active:
+                        log.info("🟡 [종료] SelectBoss_0 감지 → 게임종료 모드 전환")
+                        self._game_end_mode = True
+                        continue
 
                 # ── 28box 자동 판매 설정 ──────────────────
                 if self.cfg.get("f9_box28_monitor_on", True) and not is_auto_sell_set:
@@ -1817,7 +1946,7 @@ class Macro:
         keyboard.add_hotkey("f7",        spawn(self.f7))
         keyboard.add_hotkey("f8",        spawn(self.f8))
         keyboard.add_hotkey("f9",        spawn(self.f9))
-        keyboard.add_hotkey("f11",       spawn(self.f10))
+        keyboard.add_hotkey("f11",       spawn(self.f11))
         keyboard.add_hotkey("ctrl+f12",  self._quit)
         keyboard.add_hotkey("ctrl+f11",
                             lambda: self.root.after(0, self.ui.toggle)

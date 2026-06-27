@@ -139,7 +139,7 @@ ENTER → @태초 → ENTER
 | 좌표 설정 | A/B/C/M/ON 좌표 |
 | F6 설정 | 채팅·식별코드·분기 |
 | F9 설정 | 펫·28box 감시 |
-| F11 설정 | 방장모드 ON/OFF · 유저 닉네임 |
+| 게임모드 | 방장모드 ON/OFF · 유저 닉네임 · 게임종료 루프 ON/OFF |
 | 고급1 | F9/F7 딜레이 |
 | 고급2 | 이미지 매칭 정확도 (나머지/box/count/speed) |
 
@@ -190,4 +190,50 @@ ENTER → @태초 → ENTER
 
 ---
 
+---
+
+## 게임종료 루프 (`_game_end_check`)
+
+F9 루프 내에서 동작. `game_end_on=True` 일 때 활성화.
+
+```
+[비활성 상태 (_game_end_mode=False)]
+  SelectBoss_0 탐색 (conf=0.80, sb1_reg)
+    sb1_reg: rx=0.2739, ry=0.1682, rw=0.4522, rh=0.4267
+  감지 → _game_end_mode=True → F9 루프 이후 로직 스킵, 게임종료 모드 전환
+
+[게임종료 모드 (_game_end_mode=True)]
+  BossClear_2 탐색 (conf=0.80, bc2_reg)
+    bc2_reg: rx=0.2677, ry=0.2494, rw=0.4553, rh=0.3024
+  미감지 → sleep(0.12) → continue
+  감지 → 종료 시퀀스:
+    PrtSc → 스크린샷 파일 감지 (1.5s 대기)
+    파일 없음 → 활성 상태 유지 (재시도)
+    파일 있음 →
+      sleep(0.5)
+      F10 → E → S → Q → sleep(3.0) → Enter → sleep(0.5)
+      gamemode_host_on=True → F11 입력 (방장모드 시작)
+      _stop.set() → F9 루프 종료
+```
+
+### 이미지 파일
+| 파일 | 설명 |
+|---|---|
+| SelectBoss_0.png | 보스선택창 "예상 파티 총 딜량" 텍스트 크롭 (320×30) |
+| BossClear_1.png | 게임 클리어 전체 화면 (참조용) |
+| BossClear_1T.png | bc2_reg 영역 추출용 노란박스 이미지 |
+| BossClear_2.png | 클리어 텍스트 템플릿 (125×30) |
+
+### 내부 변수명 규칙
+| 변수 | 설명 |
+|---|---|
+| `_game_end_mode` | 게임종료 모드 플래그 (F9 루프 내) |
+| `_host_stop` | 방장모드 stop Event |
+| `_f11thr` | 방장모드 스레드 |
+| `gamemode_host_on` | 방장모드 사용 여부 (config 키) |
+
+---
+
 _최종 업데이트: 2026-06-27 — v1.1: F11 방장모드 추가 (OCR 닉네임 전원 확인 후 Host_4 클릭) / Host_3 템플릿 슬롯 블랙아웃 처리 / difflib 유사도 매칭 적용_
+
+_최종 업데이트: 2026-06-27 — v1.3: 게임종료 루프 추가 (SelectBoss_0→BossClear_2→종료 시퀀스) / F9 루프 게임종료 모드 전환 구조 / f10 내부명 → f11/gamemode 리네임 / print screen 키명 수정 / 👑 방장설정 버튼 메인창 추가_
