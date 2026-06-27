@@ -1317,7 +1317,14 @@ class ConfigUI:
         """500ms 마다 F9 상태 + 로그 큐 일괄 갱신"""
         # F9 상태
         if self.macro._f9thr and self.macro._f9thr.is_alive():
-            if self.macro._game_end_mode:
+            if self.macro._game_end_mode and self.macro._f9_held:
+                elapsed = min(4.0, time.time() - self.macro._f9_press_time)
+                self._status_sv.set("게임 종료 대기")
+                self._status_dot.configure(fg="#f9e2af")
+                self._f9_btn.configure(
+                    text=f"■  종료 감지 중  |  F9 {elapsed:.1f}s / 4s",
+                    bg=self.C_RED, fg="#1e1e2e", activebackground="#f5a0b0")
+            elif self.macro._game_end_mode:
                 self._status_sv.set("게임 종료 대기")
                 self._status_dot.configure(fg="#f9e2af")
                 self._f9_btn.configure(text="■  종료 감지 중", bg=self.C_RED, fg="#1e1e2e",
@@ -2331,7 +2338,7 @@ class Macro:
             if e.name == "f9":
                 held = time.time() - self._f9_press_time
                 self._f9_held = False
-                if held >= 3.0 and self._game_end_mode:
+                if held >= 4.0 and self._game_end_mode:
                     log.info("🔄 [F9 장누름] 게임종료 모드 초기화")
                     self._game_end_mode = False
                 else:
