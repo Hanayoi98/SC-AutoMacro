@@ -1892,6 +1892,7 @@ class Macro:
                 log.warning("[따라가기] follow_search_region 미설정 → 전체 창으로 fallback")
                 search_reg = reg
 
+            step2_fails = 0
             for attempt in range(1, MAX_RETRY + 1):
                 if self._follow_stop.is_set():
                     log.info("[따라가기] 정지 요청")
@@ -1913,8 +1914,14 @@ class Macro:
                 log.info("🔍 Step2: 닉네임 '%s' OCR 탐색", nickname)
                 found_y = self._follow_find_nickname_y(search_reg, nickname)
                 if found_y is None:
-                    log.warning("닉네임 '%s' 미발견 → 종료", nickname)
-                    return
+                    step2_fails += 1
+                    log.warning("닉네임 '%s' 미발견 → Step1 재시도 (%d/5)", nickname, step2_fails)
+                    if step2_fails >= 5:
+                        log.warning("[따라가기] 닉네임 5회 미발견 → 루프 자동 종료")
+                        return
+                    time.sleep(0.5)
+                    continue
+                step2_fails = 0
                 log.info("✅ 닉네임 발견 Y=%d", found_y)
 
                 # Step 3: 그 Y의 X축에서 AutoFollow_2 탐색 → 클릭
