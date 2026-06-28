@@ -89,22 +89,40 @@ count 이미지 우측(+2px) 12×14px 영역 픽셀 스캔
 
 ---
 
-## F6 루틴
-```
-f6_chat_macro_on=True → ENTER → @자동1 → ENTER (+step_delay)
-0키 (+step_delay)
-id_code 입력 (SendInput)
-f9_early_branch_on=True → f7() 자동 실행
-```
+## F6F7 루틴 (`_f6f7_loop`)
 
-## F7 루틴
+F6/F7 키 공통 토글 스레드 (`_f6f7_thr` + `_f6f7_stop`)
+실행 중 재입력 → 정지 / 정지 후 재입력 → 처음부터 시작
+
 ```
-key 이미지 대기 (무한, region_game)
-F2 → 2 → f6_pet_upgrade → 3 → f6_final_action  (딜레이: f7_step_delay)
-_f7_mouse_routine():  (마우스 이동: f7_mouse_move_dur / 클릭·키 딜레이: 고정 0.45s)
-  coord_a 이동 → 더블클릭(0.45s) → Q(0.45s)
-  coord_b 이동 → 더블클릭(0.45s) → Q(0.45s)
-  coord_c 이동 → (싱글클릭(0.45s) → Q(0.45s)) × 4
+F6 키 입력
+  _f6f7_thr 실행 중 → 정지
+  미실행 → start_at_f7=False 로 _f6f7_loop 시작
+
+F7 키 입력
+  _f6f7_thr 실행 중 → 정지
+  미실행 → start_at_f7=True 로 _f6f7_loop 시작
+
+_f6f7_loop(start_at_f7=False):
+  ── F6 구간 ──
+  SC 창 hwnd 획득 실패 → 종료
+  boss_loop 영역(rx/ry/rw/rh)에서 AutoStart_2 대기 (_f6f7_stop 체크)
+  감지 → sleep(1.0)
+  f6_chat_macro_on=True → ENTER → @자동1 → ENTER (+step_delay)
+  0키 (+step_delay) → id_code 입력 (SendInput)
+  f9_early_branch_on=False → 종료
+
+  ── F7 구간 ──
+  F2 (화면 재고정)  ← 재시작 시 F2-locked 상태 해제/재설정
+  key 이미지 대기 (region_game, _f6f7_stop 체크)
+  key 발견 → F2 → 2 → f6_pet_upgrade → 3 → f6_final_action (f7_step_delay)
+  _f7_mouse_routine():
+    coord_a → 더블클릭(0.45s) → Q(0.45s)
+    coord_b → 더블클릭(0.45s) → Q(0.45s)
+    coord_c → (싱글클릭(0.45s) → Q(0.45s)) × 4
+
+_f6f7_loop(start_at_f7=True):
+  F6 구간 생략 → F7 구간만 실행 (F2 재고정부터)
 ```
 
 ### F7 전용 딜레이 설정키

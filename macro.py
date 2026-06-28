@@ -1604,6 +1604,8 @@ class Macro:
         self._f11thr: Optional[threading.Thread] = None
         self._follow_stop = threading.Event()
         self._follow_thr: Optional[threading.Thread] = None
+        self._f6f7_stop = threading.Event()
+        self._f6f7_thr: Optional[threading.Thread] = None
         self._game_end_mode = False
         self._boss_select_active = False
         self._f9_press_time = 0.0
@@ -1690,79 +1692,112 @@ class Macro:
     # F6: 채팅 + 식별코드 입력
     # ─────────────────────────────────────
     def f6(self) -> None:
+        if self._f6f7_thr and self._f6f7_thr.is_alive():
+            log.info("═══ F6F7 정지 ═══")
+            self._f6f7_stop.set()
+            return
         if not is_sc_active():
             log.warning("F6: 스타크래프트 비활성 - 무시")
             return
-        log.info("═══ F6 시작 ═══")
-        try:
-            chat_on = self.cfg.get("f6_chat_macro_on", True)
+        self._f6f7_stop.clear()
+        self._f6f7_thr = threading.Thread(
+            target=self._f6f7_loop, kwargs={"start_at_f7": False}, daemon=True)
+        self._f6f7_thr.start()
 
-            if chat_on:
-                # ① 채팅창 열기
-                self.inp.press("enter")              # input_delay 후
-
-                # ② @자동1 입력 (SendInput 유니코드 직접 주입)
-                self.inp.paste_text("@자동1")        # 글자당 input_delay
-
-                # ③ 전송
-                self.inp.press("enter")              # input_delay 후
-                time.sleep(self.cfg.get("step_delay", 0.2))                     # 전송 후 고정 대기
-
-            # ④ 0: 부대지정 호출 (게임 단축키)
-            self.inp.press("0")                     # input_delay 후
-            time.sleep(self.cfg.get("step_delay", 0.2))                         # UI 열릴 때까지 고정 대기
-
-            # ⑤ 식별코드 입력 (ENTER 없음 / SendInput 유니코드 직접 주입)
-            _type_unicode(str(self.cfg["id_code"]), delay=self.inp.delay)
-
-            log.info("F6 완료 (채팅매크로=%s)", chat_on)
-
-            # ⑥ 자동 분기 → F7 실행
-            if self.cfg.get("f9_early_branch_on", False):
-                log.info("→ 자동 분기: F7 실행")
-                self.f7()
-
-        except Exception as e:
-            log.error("F6 오류: %s", e, exc_info=True)
-
-    # ─────────────────────────────────────
-    # F7: autosetting 대기 → 업그레이드 → 마우스 루틴
-    # ─────────────────────────────────────
     def f7(self) -> None:
+        if self._f6f7_thr and self._f6f7_thr.is_alive():
+            log.info("═══ F6F7 정지 ═══")
+            self._f6f7_stop.set()
+            return
         if not is_sc_active():
             log.warning("F7: 스타크래프트 비활성 - 무시")
             return
-        log.info("═══ F7 시작 ═══")
+        self._f6f7_stop.clear()
+        self._f6f7_thr = threading.Thread(
+            target=self._f6f7_loop, kwargs={"start_at_f7": True}, daemon=True)
+        self._f6f7_thr.start()
+
+    def _f6f7_loop(self, start_at_f7: bool = False) -> None:
+        log.info("═══ F6F7 루프 시작 (start_at_f7=%s) ═══", start_at_f7)
         try:
-            # key 이미지가 화면에 나타날 때까지 대기 (F9 stop 이벤트와 무관)
-            log.info("key 이미지 대기 중...")
-            gr = self._abs_region("region_game")
-            pos = self.finder.wait("key", region=gr)   # stop_event 없음 → 발견까지 무한 대기
-            if not pos:
-                log.warning("key 발견 실패")
-                return
-            log.info("key 발견: %s", pos)
+            if not start_at_f7:
+                # ── F6 구간 ──────────────────────────────
+                # AutoStart_2 감지 대기 (boss_loop 영역)
+                _hwnd = _sc_find_hwnd()
+                if not _hwnd:
+                    log.warning("[F6] SC 창을 찾을 수 없음")
+                    return
+                gx, gy, gw, gh = _sc_get_rect(_hwnd)
+                rx = float(self.cfg.get("boss_loop_rx", 0.2677))
+                ry = float(self.cfg.get("boss_loop_ry", 0.2494))
+                rw = float(self.cfg.get("boss_loop_rw", 0.4553))
+                rh = float(self.cfg.get("boss_loop_rh", 0.3024))
+                detect_reg = (int(gx+gw*rx), int(gy+gh*ry), int(gw*rw), int(gh*rh))
 
+                log.info("🔍 [F6] AutoStart_2 대기 중...")
+                pos = self.finder.wait("AutoStart_2", region=detect_reg,
+                                       stop_event=self._f6f7_stop)
+                if not pos or self._f6f7_stop.is_set():
+                    log.info("[F6] 정지 또는 미감지")
+                    return
+                log.info("✅ [F6] AutoStart_2 감지 @ %s → sleep(1.0)", pos)
+                time.sleep(1.0)
+                if self._f6f7_stop.is_set():
+                    return
+
+                chat_on = self.cfg.get("f6_chat_macro_on", True)
+                if chat_on:
+                    self.inp.press("enter")
+                    self.inp.paste_text("@자동1")
+                    self.inp.press("enter")
+                    time.sleep(self.cfg.get("step_delay", 0.2))
+
+                self.inp.press("0")
+                time.sleep(self.cfg.get("step_delay", 0.2))
+                _type_unicode(str(self.cfg["id_code"]), delay=self.inp.delay)
+                log.info("✅ [F6] 완료 (채팅매크로=%s)", chat_on)
+
+                if not self.cfg.get("f9_early_branch_on", False):
+                    log.info("═══ F6F7 종료 (F7 미사용) ═══")
+                    return
+
+                if self._f6f7_stop.is_set():
+                    return
+
+            # ── F7 구간 ──────────────────────────────
+            log.info("═══ [F7] 시작 ═══")
             sd = self.cfg.get("f7_step_delay", 0.2)
-            self.inp_f7.press("f2");  time.sleep(sd)
-            self.inp_f7.press("2");   time.sleep(sd)
+            gr = self._abs_region("region_game")
 
-            # 초반 펫 업그레이드 문자열
-            self.inp_f7.type_seq(self.cfg.get("f6_pet_upgrade", ""))
+            # 재시작 시 화면 F2 재고정
+            self.inp_f7.press("f2")
             time.sleep(sd)
 
-            self.inp_f7.press("3");   time.sleep(sd)
+            log.info("🔍 [F7] key 이미지 대기 중...")
+            pos = self.finder.wait("key", region=gr, stop_event=self._f6f7_stop)
+            if not pos or self._f6f7_stop.is_set():
+                log.info("[F7] 정지 또는 key 미발견")
+                return
+            log.info("✅ [F7] key 발견 @ %s", pos)
 
-            # 마무리 동작 문자열
+            self.inp_f7.press("f2");  time.sleep(sd)
+            self.inp_f7.press("2");   time.sleep(sd)
+            self.inp_f7.type_seq(self.cfg.get("f6_pet_upgrade", ""))
+            time.sleep(sd)
+            self.inp_f7.press("3");   time.sleep(sd)
             self.inp_f7.type_seq(self.cfg.get("f6_final_action", ""))
             time.sleep(sd)
 
-            # 마우스 루틴
+            if self._f6f7_stop.is_set():
+                return
+
             self._f7_mouse_routine()
-            log.info("F7 완료")
+            log.info("✅ [F7] 완료")
 
         except Exception as e:
-            log.error("F7 오류: %s", e, exc_info=True)
+            log.error("F6F7 오류: %s", e, exc_info=True)
+
+        log.info("═══ F6F7 루프 종료 ═══")
 
     def _f7_mouse_routine(self) -> None:
         """
