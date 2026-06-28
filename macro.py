@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-StarCraft Auto Macro v1.3
+StarCraft Auto Macro v1.4
 이미지 인식 기반 스타크래프트 자동화 매크로
 
 단축키
@@ -1279,7 +1279,7 @@ class ConfigUI:
 
     def _build(self):
         r = self.root
-        r.title("SC Auto Macro  v1.3")
+        r.title("SC Auto Macro  v1.4")
         r.configure(bg=self.C_BG)
         r.attributes("-topmost", True)
         r.resizable(False, False)
@@ -1301,7 +1301,7 @@ class ConfigUI:
 
         ver_frame = tk.Frame(hdr, bg=self.C_BG3, padx=8, pady=4)
         ver_frame.pack(side="right", padx=16, pady=10)
-        tk.Label(ver_frame, text="v1.3", font=("Malgun Gothic",10,"bold"),
+        tk.Label(ver_frame, text="v1.4", font=("Malgun Gothic",10,"bold"),
                  bg=self.C_BG3, fg=self.C_ACC).pack()
 
         # ── 상태 표시 카드 ───────────────
@@ -2681,7 +2681,7 @@ class Macro:
     # ─────────────────────────────────────
     def start(self) -> None:
         log.info("╔══════════════════════════════════╗")
-        log.info("║  StarCraft Auto Macro  v1.3      ║")
+        log.info("║  StarCraft Auto Macro  v1.4      ║")
         log.info("╚══════════════════════════════════╝")
         log.info("F6/F7/F8/F9 : 각 기능 | Ctrl+F11 : 설정 창 | Ctrl+F12 : 종료")
 
