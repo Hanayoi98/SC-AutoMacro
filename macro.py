@@ -726,7 +726,7 @@ class SettingsWindow:
 
     C_BG = "#1e1e2e"; C_BG2 = "#313244"; C_BG3 = "#45475a"
     C_FG = "#cdd6f4"; C_FG2 = "#a6adc8"
-    C_ACC = "#89b4fa"; C_GREEN = "#a6e3a1"; C_RED = "#f38ba8"
+    C_ACC = "#89b4fa"; C_GREEN = "#a6e3a1"; C_RED = "#f38ba8"; C_PINK = "#f5c2e7"
     FONT  = ("Malgun Gothic", 9)
     FONTB = ("Malgun Gothic", 9, "bold")
 
