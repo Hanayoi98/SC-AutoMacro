@@ -200,6 +200,7 @@ DEFAULT_CONFIG: dict = {
     "f9_pet_interval":     200,
     "f9_pet_upgrade":      "e3",
     "box28_confidence_set": 0.97,
+    "auto_drive_on":        False,
     "f9_box28_monitor_on": True,
     "max_box":              28,
     "f9_early_branch_on":  True,
@@ -243,6 +244,7 @@ _NUM_KEYS = {
     "f9_pet_interval":     int,
     "max_box":             int,
     "box28_confidence_set": float,
+    "auto_drive_on":        bool,
     "check_on_offset_x":   int,
     "check_on_offset_y":   int,
     "search_confidence":   float,
@@ -944,6 +946,8 @@ class SettingsWindow:
             ("speed 정확도 (0~1)", "speed_confidence",    "num"),
         ]
         self._cfg_rows(f, rows)
+        self._lbl(f, "[ 방장모드 ]", bold=True, fg=self.C_ACC).pack(anchor="w", pady=(12,2), padx=10)
+        self._cfg_rows(f, [("자동운행모드", "auto_drive_on", "bool")])
 
     # ── 공통: config 행 생성 ─────────────────────
     def _cfg_rows(self, parent, rows):
@@ -2177,6 +2181,9 @@ class Macro:
                     log.info("🎯 [방장] 전원 확인 (%s) → 3.0s 후 Host_4 클릭", ", ".join(found))
                     time.sleep(3.0)
                     _click_and_wait("Host_4", 0.5)
+                    if self.cfg.get("auto_drive_on", False):
+                        log.info("🚗 [방장] 자동운행모드 → F6 입력")
+                        self.f6()
                     break
                 else:
                     log.info("⏳ [방장] 미확인 인원 있음 → 재탐색")
