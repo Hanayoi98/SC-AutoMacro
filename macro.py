@@ -759,9 +759,9 @@ class SettingsWindow:
 
         self._tab_window(nb)
         self._tab_coords(nb)
-        self._tab_f6(nb)
-        self._tab_f9(nb)
-        self._tab_gamemode(nb)
+        self._tab_keys(nb)
+        self._tab_gamemode1(nb)
+        self._tab_gamemode2(nb)
         self._tab_advanced1(nb)
         self._tab_advanced2(nb)
 
@@ -823,32 +823,31 @@ class SettingsWindow:
             tk.Label(row, textvariable=sv, font=self.FONT, bg=self.C_BG, fg=self.C_ACC, width=14, anchor="w").pack(side="left", padx=6)
             self._lbl(row, desc, fg=self.C_FG2).pack(side="left")
 
-    # ── 탭 3: F6 설정 ────────────────────────────
-    def _tab_f6(self, nb):
-        f = self._frame(nb); nb.add(f, text=" F6 설정 ")
-        rows = [
-            ("식별코드",        "id_code",          "str"),
-            ("F6 펫 업그레이드","f6_pet_upgrade",    "str"),
-            ("F6 마무리 동작",  "f6_final_action",   "str"),
-            ("채팅 매크로 사용","f6_chat_macro_on",  "bool"),
-            ("F7 자동 실행",    "f9_early_branch_on","bool"),
+    # ── 탭 3: 키 설정 (F6 + F9) ─────────────────
+    def _tab_keys(self, nb):
+        f = self._frame(nb); nb.add(f, text=" 키 설정 ")
+        self._lbl(f, "[ F6 설정 ]", bold=True, fg=self.C_ACC).pack(anchor="w", pady=(8,2), padx=10)
+        rows_f6 = [
+            ("식별코드",        "id_code",           "str"),
+            ("F6 펫 업그레이드","f6_pet_upgrade",     "str"),
+            ("F6 마무리 동작",  "f6_final_action",    "str"),
+            ("채팅 매크로 사용","f6_chat_macro_on",   "bool"),
+            ("F7 자동 실행",    "f9_early_branch_on", "bool"),
         ]
-        self._cfg_rows(f, rows)
-
-    # ── 탭 4: F9 설정 ────────────────────────────
-    def _tab_f9(self, nb):
-        f = self._frame(nb); nb.add(f, text=" F9 설정 ")
-        rows = [
-            ("펫 업그레이드 키",    "f9_pet_upgrade",      "str"),
-            ("펫 업그레이드 주기(초)","f9_pet_interval",   "num"),
-            ("Max Box 감시",        "f9_box28_monitor_on", "bool"),
-            ("Max Box 번호",        "max_box",             "num"),
+        self._cfg_rows(f, rows_f6)
+        tk.Frame(f, height=1, bg=self.C_BG3).pack(fill="x", padx=10, pady=(10,4))
+        self._lbl(f, "[ F9 설정 ]", bold=True, fg=self.C_ACC).pack(anchor="w", pady=(4,2), padx=10)
+        rows_f9 = [
+            ("펫 업그레이드 키",      "f9_pet_upgrade",      "str"),
+            ("펫 업그레이드 주기(초)", "f9_pet_interval",     "num"),
+            ("Max Box 감시",          "f9_box28_monitor_on", "bool"),
+            ("Max Box 번호",          "max_box",             "num"),
         ]
-        self._cfg_rows(f, rows)
+        self._cfg_rows(f, rows_f9)
 
-    # ── 탭 5: 게임모드 ───────────────────────────
-    def _tab_gamemode(self, nb):
-        f = self._frame(nb); nb.add(f, text=" 게임모드 ")
+    # ── 탭 4: 게임모드1 (F11 방장/따라가기) ─────────
+    def _tab_gamemode1(self, nb):
+        f = self._frame(nb); nb.add(f, text=" 게임모드1 ")
 
         # ── F11 모드 선택 ──────────────────────────
         self._lbl(f, "[ F11 모드 선택 ]", bold=True, fg=self.C_ACC).pack(anchor="w", pady=(8,2), padx=10)
@@ -858,7 +857,7 @@ class SettingsWindow:
         _mode_sv = tk.StringVar(value=str(self.cfg.get("f11_mode", "host")))
         self._sv_map["f11_mode"] = ("str", _mode_sv)
         tk.Radiobutton(mode_row, text="방장모드", variable=_mode_sv, value="host",
-                       bg=self.C_BG, fg=self.C_FG, selectcolor=self.C_BG2,
+                       bg=self.C_BG, fg=self.C_PINK, selectcolor=self.C_BG2,
                        activebackground=self.C_BG, font=self.FONT).pack(side="left", padx=(0,8))
         tk.Radiobutton(mode_row, text="따라가기", variable=_mode_sv, value="follow",
                        bg=self.C_BG, fg=self.C_GREEN, selectcolor=self.C_BG2,
@@ -866,21 +865,21 @@ class SettingsWindow:
 
         # ── 방장모드 ───────────────────────────────
         tk.Frame(f, height=1, bg=self.C_BG3).pack(fill="x", padx=10, pady=(10,4))
-        self._lbl(f, "[ 방장모드 (f11_mode=host) ]", bold=True, fg=self.C_PINK).pack(anchor="w", pady=(4,2), padx=10)
+        self._lbl(f, "[ 방장모드 ]", bold=True, fg=self.C_PINK).pack(anchor="w", pady=(4,2), padx=10)
         rows_host = [
-            ("방장모드 사용",      "gamemode_host_on",    "bool"),
-            ("유저 닉네임",        "host_username",       "str"),
-            ("닉네임 인식률",      "host_confidence",     "num"),
-            ("자동 보스 선택",     "auto_boss_select_on", "bool"),
+            ("방장모드 사용",  "gamemode_host_on",    "bool"),
+            ("유저 닉네임",    "host_username",       "str"),
+            ("닉네임 인식률",  "host_confidence",     "num"),
+            ("자동 보스 선택", "auto_boss_select_on", "bool"),
         ]
         self._cfg_rows(f, rows_host)
 
         # ── 따라가기 ───────────────────────────────
         tk.Frame(f, height=1, bg=self.C_BG3).pack(fill="x", padx=10, pady=(10,4))
-        self._lbl(f, "[ 따라가기 (f11_mode=follow) ]", bold=True, fg=self.C_GREEN).pack(anchor="w", pady=(4,2), padx=10)
+        self._lbl(f, "[ 따라가기 ]", bold=True, fg=self.C_GREEN).pack(anchor="w", pady=(4,2), padx=10)
         rows_follow = [
-            ("따라갈 닉네임",       "follow_nickname",   "str"),
-            ("이미지 매칭 정확도",  "follow_confidence", "num"),
+            ("따라갈 닉네임",      "follow_nickname",   "str"),
+            ("이미지 매칭 정확도", "follow_confidence", "num"),
         ]
         self._cfg_rows(f, rows_follow)
 
@@ -894,13 +893,14 @@ class SettingsWindow:
         self._lbl(reg_row, sv=self._follow_region_sv, fg=self.C_FG2).pack(side="left", padx=(4,8))
         self._btn(reg_row, "드래그 선택", self._start_follow_region_drag).pack(side="left")
 
-        tk.Frame(f, height=1, bg=self.C_BG3).pack(fill="x", padx=10, pady=(10,4))
-        self._lbl(f, "[ 게임종료 루프 ]", bold=True, fg=self.C_ACC).pack(anchor="w", pady=(4,2), padx=10)
+    # ── 탭 5: 게임모드2 (게임종료·추가 예정) ────────
+    def _tab_gamemode2(self, nb):
+        f = self._frame(nb); nb.add(f, text=" 게임모드2 ")
+        self._lbl(f, "[ 게임종료 루프 ]", bold=True, fg=self.C_ACC).pack(anchor="w", pady=(8,2), padx=10)
         rows_end = [
             ("게임종료 루프 사용", "game_end_on", "bool"),
         ]
         self._cfg_rows(f, rows_end)
-
 
 
     # ── 탭 6: 고급1 (딜레이) ─────────────────────
@@ -1430,7 +1430,7 @@ class ConfigUI:
     def _open_gamemode_settings(self):
         if self._settings is None:
             self._settings = SettingsWindow(self.macro, self.root)
-        self._settings.show_tab(4)
+        self._settings.show_tab(3)
 
     def _poll(self):
         """500ms 마다 F9 상태 + 로그 큐 일괄 갱신"""
