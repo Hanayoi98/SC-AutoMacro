@@ -1922,11 +1922,28 @@ class Macro:
         )
 
         nick_lower = nickname.lower()
+        nlen = len(nick_lower)
+
+        def _fuzzy_match(t: str) -> bool:
+            # 1. 정확한 substring 포함
+            if nick_lower in t:
+                return True
+            # 2. 전체 문자열 유사도 0.70 이상
+            if difflib.SequenceMatcher(None, nick_lower, t).ratio() >= 0.70:
+                return True
+            # 3. 복합 OCR 문자열 내 슬라이딩 윈도우 (게임 폰트 오인식 보정)
+            if len(t) >= nlen:
+                for k in range(len(t) - nlen + 1):
+                    sub = t[k:k + nlen]
+                    if difflib.SequenceMatcher(None, nick_lower, sub).ratio() >= 0.80:
+                        return True
+            return False
+
         for i, text in enumerate(data["text"]):
             t = text.strip().lower()
             if not t:
                 continue
-            if nick_lower in t or difflib.SequenceMatcher(None, nick_lower, t).ratio() >= 0.70:
+            if _fuzzy_match(t):
                 y_in_region = int(data["top"][i] / scale) + int(data["height"][i] / scale) // 2
                 return py + y_in_region
         return None
@@ -1934,8 +1951,8 @@ class Macro:
     def _follow_click_arrow(self, full_reg: tuple, target_y: int, conf: float) -> bool:
         """target_y 행의 X축에서 AutoFollow_2(→ 버튼)를 탐색해 클릭."""
         rx, ry, rw, rh = full_reg
-        strip_y = max(ry, target_y - 20)
-        strip_reg = (rx, strip_y, rw, 40)
+        strip_y = max(ry, target_y - 40)
+        strip_reg = (rx, strip_y, rw, 80)
         pos = self.finder.find("AutoFollow_2", conf, strip_reg)
         if pos:
             self.inp.click(int(pos[0]), int(pos[1]))
