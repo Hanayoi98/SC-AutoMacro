@@ -1871,6 +1871,7 @@ class Macro:
     def _follow_loop(self) -> None:
         FOLLOW_CONF = float(self.cfg.get("follow_confidence", 0.75))
         nickname    = self.cfg.get("follow_nickname", "").strip()
+        MAX_RETRY   = 10
 
         def _full():
             hwnd = _sc_find_hwnd()
@@ -1886,36 +1887,45 @@ class Macro:
                 log.warning("[따라가기] SC 창을 찾을 수 없음")
                 return
 
-            # Step 1: AutoFollow_3 ("친구 [") 탐색 → 클릭
-            log.info("🔍 [따라가기] Step1: AutoFollow_3 탐색")
-            pos3 = self.finder.find("AutoFollow_3", FOLLOW_CONF, reg)
-            if pos3:
-                self.inp.click(int(pos3[0]), int(pos3[1]))
-                log.info("✅ [따라가기] AutoFollow_3 클릭 @ %s", pos3)
-                time.sleep(0.5)
-            else:
-                log.warning("[따라가기] AutoFollow_3 미발견 → 계속 진행")
-
-            # Step 2: 닉네임 Y좌표 OCR 탐색
-            log.info("🔍 [따라가기] Step2: 닉네임 '%s' OCR 탐색", nickname)
             search_reg = self._abs_region("follow_search_region")
             if not search_reg:
                 log.warning("[따라가기] follow_search_region 미설정 → 전체 창으로 fallback")
                 search_reg = reg
 
-            found_y = self._follow_find_nickname_y(search_reg, nickname)
-            if found_y is None:
-                log.warning("[따라가기] 닉네임 '%s' 미발견", nickname)
-                return
-            log.info("✅ [따라가기] 닉네임 발견 Y=%d", found_y)
+            for attempt in range(1, MAX_RETRY + 1):
+                if self._follow_stop.is_set():
+                    log.info("[따라가기] 정지 요청")
+                    break
 
-            # Step 3: 그 Y의 X축에서 AutoFollow_2 탐색 → 클릭
-            log.info("🔍 [따라가기] Step3: AutoFollow_2 탐색 (Y=%d)", found_y)
-            if not self._follow_click_arrow(reg, found_y, FOLLOW_CONF):
-                log.warning("[따라가기] AutoFollow_2 미발견 (Y=%d)", found_y)
-                return
+                log.info("─── [따라가기] 시도 %d/%d ───", attempt, MAX_RETRY)
 
-            log.info("✅ [따라가기] 완료")
+                # Step 1: AutoFollow_3 ("친구 [") 탐색 → 클릭
+                log.info("🔍 Step1: AutoFollow_3 탐색")
+                pos3 = self.finder.find("AutoFollow_3", FOLLOW_CONF, reg)
+                if pos3:
+                    self.inp.click(int(pos3[0]), int(pos3[1]))
+                    log.info("✅ AutoFollow_3 클릭 @ %s", pos3)
+                    time.sleep(0.5)
+                else:
+                    log.warning("AutoFollow_3 미발견 → 계속 진행")
+
+                # Step 2: 닉네임 Y좌표 OCR 탐색
+                log.info("🔍 Step2: 닉네임 '%s' OCR 탐색", nickname)
+                found_y = self._follow_find_nickname_y(search_reg, nickname)
+                if found_y is None:
+                    log.warning("닉네임 '%s' 미발견 → 종료", nickname)
+                    return
+                log.info("✅ 닉네임 발견 Y=%d", found_y)
+
+                # Step 3: 그 Y의 X축에서 AutoFollow_2 탐색 → 클릭
+                log.info("🔍 Step3: AutoFollow_2 탐색 (Y=%d)", found_y)
+                if self._follow_click_arrow(reg, found_y, FOLLOW_CONF):
+                    log.info("✅ [따라가기] 완료")
+                    break
+                log.warning("AutoFollow_2 미발견 → Step1 재시도 (%d/%d)", attempt, MAX_RETRY)
+                time.sleep(0.5)
+            else:
+                log.warning("[따라가기] %d회 시도 후 미발견 → 루프 자동 종료", MAX_RETRY)
 
         except Exception as e:
             log.error("[따라가기] 오류: %s", e, exc_info=True)
