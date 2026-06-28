@@ -2654,7 +2654,7 @@ class Macro:
     # ─────────────────────────────────────
     def start(self) -> None:
         log.info("╔══════════════════════════════════╗")
-        log.info("║  StarCraft Auto Macro  v1.0      ║")
+        log.info("║  StarCraft Auto Macro  v1.3      ║")
         log.info("╚══════════════════════════════════╝")
         log.info("F6/F7/F8/F9 : 각 기능 | Ctrl+F11 : 설정 창 | Ctrl+F12 : 종료")
 
