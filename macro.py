@@ -1869,6 +1869,9 @@ class Macro:
     # F11: 방장모드 / 따라가기 시작/정지
     # ─────────────────────────────────────
     def f11(self) -> None:
+        if self._f6f7_thr and self._f6f7_thr.is_alive():
+            log.info("[F11] F6F7 대기 중 → 자동 정지")
+            self._f6f7_stop.set()
         mode = self.cfg.get("f11_mode", "host")
         if mode == "follow":
             self._f11_follow()
