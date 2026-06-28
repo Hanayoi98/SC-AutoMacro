@@ -106,6 +106,16 @@ from mss import mss
 import pytesseract
 from PIL import Image as _PILImage
 
+# tesseract.exe subprocess CMD 창 숨김 (Windows)
+if sys.platform == "win32":
+    import subprocess as _sub
+    _OrigPopenInit = _sub.Popen.__init__
+    def _PatchedPopenInit(self, args, **kwargs):
+        kwargs.setdefault("creationflags", 0)
+        kwargs["creationflags"] |= _sub.CREATE_NO_WINDOW
+        _OrigPopenInit(self, args, **kwargs)
+    _sub.Popen.__init__ = _PatchedPopenInit
+
 for _tp in [r"C:\Program Files\Tesseract-OCR\tesseract.exe",
              r"C:\Program Files (x86)\Tesseract-OCR\tesseract.exe"]:
     if os.path.exists(_tp):
