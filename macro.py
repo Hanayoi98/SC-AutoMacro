@@ -222,7 +222,7 @@ DEFAULT_CONFIG: dict = {
     "key_speed_delay":   1.0,
     "window_size":       [0, 0],
     # ── 게임모드 ──
-    "gamemode_host_on":       False,
+    "f11_on":                 False,
     "host_username":          "Hanayoi",
     "host_confidence":        0.65,
     "game_end_on":            False,
@@ -860,10 +860,11 @@ class SettingsWindow:
         f = self._frame(nb); nb.add(f, text=" 게임모드1 ")
 
         # ── F11 모드 선택 ──────────────────────────
-        self._lbl(f, "[ F11 모드 선택 ]", bold=True, fg=self.C_ACC).pack(anchor="w", pady=(8,2), padx=10)
-        mode_row = tk.Frame(f, bg=self.C_BG); mode_row.pack(anchor="w", padx=10, pady=4)
-        self._lbl(mode_row, "F11 실행 모드", width=20, anchor="w").pack(side="left")
+        self._lbl(f, "[ F11 실행모드 ]", bold=True, fg=self.C_ACC).pack(anchor="w", pady=(8,2), padx=10)
         self._sv_map = getattr(self, "_sv_map", {})
+        self._cfg_rows(f, [("F11 사용", "f11_on", "bool")])
+        mode_row = tk.Frame(f, bg=self.C_BG); mode_row.pack(anchor="w", padx=10, pady=4)
+        self._lbl(mode_row, "실행 모드", width=20, anchor="w").pack(side="left")
         _mode_sv = tk.StringVar(value=str(self.cfg.get("f11_mode", "host")))
         self._sv_map["f11_mode"] = ("str", _mode_sv)
         tk.Radiobutton(mode_row, text="방장모드", variable=_mode_sv, value="host",
@@ -877,7 +878,6 @@ class SettingsWindow:
         tk.Frame(f, height=1, bg=self.C_BG3).pack(fill="x", padx=10, pady=(10,4))
         self._lbl(f, "[ 방장모드 ]", bold=True, fg=self.C_PINK).pack(anchor="w", pady=(4,2), padx=10)
         rows_host = [
-            ("방장모드 사용",  "gamemode_host_on",    "bool"),
             ("유저 닉네임",    "host_username",       "str"),
             ("닉네임 인식률",  "host_confidence",     "num"),
             ("자동 보스 선택", "auto_boss_select_on", "bool"),
@@ -1837,8 +1837,8 @@ class Macro:
             self._f11_host()
 
     def _f11_host(self) -> None:
-        if not self.cfg.get("gamemode_host_on", False):
-            log.warning("F11: 방장모드 비활성 (설정에서 활성화 필요)")
+        if not self.cfg.get("f11_on", False):
+            log.warning("F11: 비활성 (설정에서 F11 사용 활성화 필요)")
             return
 
         if self._f11thr and self._f11thr.is_alive():
@@ -1856,6 +1856,10 @@ class Macro:
         self._f11thr.start()
 
     def _f11_follow(self) -> None:
+        if not self.cfg.get("f11_on", False):
+            log.warning("F11: 비활성 (설정에서 F11 사용 활성화 필요)")
+            return
+
         if self._follow_thr and self._follow_thr.is_alive():
             log.info("═══ F11 따라가기 정지 ═══")
             self._follow_stop.set()
@@ -2403,7 +2407,7 @@ class Macro:
             )
             if self.finder.find("SelectBoss_0", 0.80, boss_reg):
                 log.info("🎮 [종료] SelectBoss_0 감지")
-                if self.cfg.get("gamemode_host_on", False):
+                if self.cfg.get("f11_mode", "host") == "host":
                     self._boss_select_active = True
                     if self.cfg.get("auto_boss_select_on", False):
                         log.info("🎯 [보스선택] 방장모드 + 자동보스선택 ON → 보스선택 시작")
@@ -2456,8 +2460,8 @@ class Macro:
         self.inp.press("q");     time.sleep(3.0)
         self.inp.press("enter"); time.sleep(0.5)
 
-        if self.cfg.get("gamemode_host_on", False):
-            log.info("♟️ [종료] 방장모드 ON → F11 직접 호출")
+        if self.cfg.get("f11_on", False):
+            log.info("♟️ [종료] f11_on → F11 직접 호출")
             threading.Thread(target=self.f11, daemon=True).start()
 
         log.info("✅ [종료] 게임 종료 시퀀스 완료")
