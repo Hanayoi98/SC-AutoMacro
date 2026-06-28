@@ -1343,7 +1343,7 @@ class ConfigUI:
                                   command=self._toggle_f9)
         self._f9_btn.pack(side="left", padx=(0,6), fill="x", expand=True)
 
-        _init_mode = macro.cfg.get("f11_mode", "host")
+        _init_mode = self.macro.cfg.get("f11_mode", "host")
         _f11_bg, _f11_txt = (self.C_GREEN, "→  F11 따라가기") if _init_mode == "follow" \
                        else (self.C_PINK,  "♟  F11 방장")
         self._f11_btn = tk.Button(row1, text=_f11_txt, font=self.FONTB,
