@@ -1,11 +1,11 @@
 {
   "f6_chat_macro_on": false,
   "id_code": "985545",
-  "f6_pet_upgrade": "c, q10, w6, a10, s2, c, s7, d, c",
+  "f6_pet_upgrade": "c, q10, w6, a10, s3, c, s3, c",
   "f6_final_action": "w, s, r",
   "f9_pet_interval": 150,
   "f9_pet_upgrade": "e4",
-  "box28_confidence_set": 0.96,
+  "box28_confidence_set": 0.97,
   "f9_box28_monitor_on": true,
   "f9_early_branch_on": true,
   "check_on_offset_x": 1324,
@@ -64,5 +64,11 @@
   "boss_loop_rx": 0.2677,
   "boss_loop_ry": 0.2494,
   "boss_loop_rw": 0.4553,
-  "boss_loop_rh": 0.3024
+  "boss_loop_rh": 0.3024,
+  "max_box": 28,
+  "host_confidence": 0.65,
+  "f11_mode": "host",
+  "follow_nickname": "",
+  "follow_search_region": [0, 0, 0, 0],
+  "follow_confidence": 0.75
 }

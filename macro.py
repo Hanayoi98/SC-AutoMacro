@@ -849,13 +849,49 @@ class SettingsWindow:
     # ── 탭 5: 게임모드 ───────────────────────────
     def _tab_gamemode(self, nb):
         f = self._frame(nb); nb.add(f, text=" 게임모드 ")
-        self._lbl(f, "[ 방장모드 (F11 토글) ]", bold=True, fg=self.C_ACC).pack(anchor="w", pady=(8,2), padx=10)
+
+        # ── F11 모드 선택 ──────────────────────────
+        self._lbl(f, "[ F11 모드 선택 ]", bold=True, fg=self.C_ACC).pack(anchor="w", pady=(8,2), padx=10)
+        mode_row = tk.Frame(f, bg=self.C_BG); mode_row.pack(anchor="w", padx=10, pady=4)
+        self._lbl(mode_row, "F11 실행 모드", width=20, anchor="w").pack(side="left")
+        self._sv_map = getattr(self, "_sv_map", {})
+        _mode_sv = tk.StringVar(value=str(self.cfg.get("f11_mode", "host")))
+        self._sv_map["f11_mode"] = ("str", _mode_sv)
+        tk.Radiobutton(mode_row, text="방장모드", variable=_mode_sv, value="host",
+                       bg=self.C_BG, fg=self.C_FG, selectcolor=self.C_BG2,
+                       activebackground=self.C_BG, font=self.FONT).pack(side="left", padx=(0,8))
+        tk.Radiobutton(mode_row, text="따라가기", variable=_mode_sv, value="follow",
+                       bg=self.C_BG, fg=self.C_GREEN, selectcolor=self.C_BG2,
+                       activebackground=self.C_BG, font=self.FONT).pack(side="left")
+
+        # ── 방장모드 ───────────────────────────────
+        tk.Frame(f, height=1, bg=self.C_BG3).pack(fill="x", padx=10, pady=(10,4))
+        self._lbl(f, "[ 방장모드 (f11_mode=host) ]", bold=True, fg=self.C_ACC).pack(anchor="w", pady=(4,2), padx=10)
         rows_host = [
             ("방장모드 사용",   "gamemode_host_on", "bool"),
             ("유저 닉네임",     "host_username",    "str"),
             ("닉네임 인식률",   "host_confidence",  "num"),
         ]
         self._cfg_rows(f, rows_host)
+
+        # ── 따라가기 ───────────────────────────────
+        tk.Frame(f, height=1, bg=self.C_BG3).pack(fill="x", padx=10, pady=(10,4))
+        self._lbl(f, "[ 따라가기 (f11_mode=follow) ]", bold=True, fg=self.C_GREEN).pack(anchor="w", pady=(4,2), padx=10)
+        rows_follow = [
+            ("따라갈 닉네임",       "follow_nickname",   "str"),
+            ("이미지 매칭 정확도",  "follow_confidence", "num"),
+        ]
+        self._cfg_rows(f, rows_follow)
+
+        # 닉네임 탐색 영역 드래그 선택
+        reg_row = tk.Frame(f, bg=self.C_BG); reg_row.pack(anchor="w", padx=10, pady=4)
+        self._lbl(reg_row, "닉네임 탐색 영역", width=20, anchor="w").pack(side="left")
+        _cur_reg = self.cfg.get("follow_search_region", [0, 0, 0, 0])
+        self._follow_region_sv = tk.StringVar(
+            value=f"({_cur_reg[0]}, {_cur_reg[1]}, {_cur_reg[2]}, {_cur_reg[3]})"
+        )
+        self._lbl(reg_row, sv=self._follow_region_sv, fg=self.C_FG2).pack(side="left", padx=(4,8))
+        self._btn(reg_row, "드래그 선택", self._start_follow_region_drag).pack(side="left")
 
         tk.Frame(f, height=1, bg=self.C_BG3).pack(fill="x", padx=10, pady=(10,4))
         self._lbl(f, "[ 게임종료 루프 ]", bold=True, fg=self.C_ACC).pack(anchor="w", pady=(4,2), padx=10)
@@ -1095,6 +1131,87 @@ class SettingsWindow:
             f"보스 루프 영역 저장 완료\n"
             f"X: {rx}  Y: {ry}\nW: {rw}  H: {rh}", parent=self.win)
 
+    # ── 닉네임 탐색 영역 드래그 선택 ─────────────
+    def _start_follow_region_drag(self):
+        self.win.iconify()
+        self.win.after(300, self._open_follow_drag_overlay)
+
+    def _open_follow_drag_overlay(self):
+        sw = self.win.winfo_screenwidth()
+        sh = self.win.winfo_screenheight()
+
+        ov = tk.Toplevel()
+        ov.attributes("-fullscreen", True)
+        ov.attributes("-topmost", True)
+        ov.attributes("-alpha", 0.25)
+        ov.configure(bg="black")
+        ov.config(cursor="crosshair")
+
+        canvas = tk.Canvas(ov, bg="black", highlightthickness=0)
+        canvas.pack(fill="both", expand=True)
+
+        canvas.create_text(
+            sw // 2, 40,
+            text="드래그하여 닉네임 탐색 영역을 선택하세요  |  ESC: 취소",
+            fill="white", font=("Malgun Gothic", 14, "bold")
+        )
+
+        state = {"x0": 0, "y0": 0, "rect": None}
+
+        def on_press(e):
+            state["x0"], state["y0"] = e.x, e.y
+            if state["rect"]:
+                canvas.delete(state["rect"])
+            state["rect"] = canvas.create_rectangle(
+                e.x, e.y, e.x, e.y,
+                outline="#a6e3a1", width=2, fill="#a6e3a1", stipple="gray25"
+            )
+
+        def on_drag(e):
+            if state["rect"]:
+                canvas.coords(state["rect"], state["x0"], state["y0"], e.x, e.y)
+
+        def on_release(e):
+            x0, y0 = min(state["x0"], e.x), min(state["y0"], e.y)
+            x1, y1 = max(state["x0"], e.x), max(state["y0"], e.y)
+            ov.destroy()
+            self.win.after(100, lambda: self._finish_follow_region_drag(x0, y0, x1, y1))
+
+        def on_esc(e):
+            ov.destroy()
+            self.win.deiconify()
+
+        canvas.bind("<ButtonPress-1>",   on_press)
+        canvas.bind("<B1-Motion>",       on_drag)
+        canvas.bind("<ButtonRelease-1>", on_release)
+        ov.bind("<Escape>", on_esc)
+        ov.focus_force()
+
+    def _finish_follow_region_drag(self, x0, y0, x1, y1):
+        hwnd = self._find_sc_hwnd()
+        if hwnd:
+            try:
+                gx, gy, _, _ = _sc_get_rect(hwnd)
+            except Exception:
+                gx, gy = 0, 0
+        else:
+            gx, gy = 0, 0
+
+        rx = x0 - gx
+        ry = y0 - gy
+        rw = x1 - x0
+        rh = y1 - y0
+
+        self.cfg["follow_search_region"] = [rx, ry, rw, rh]
+        if hasattr(self, "_follow_region_sv"):
+            self._follow_region_sv.set(f"({rx}, {ry}, {rw}, {rh})")
+
+        self.macro.save_config()
+        self.win.deiconify()
+        messagebox.showinfo("영역 저장",
+            f"닉네임 탐색 영역 저장 완료\n"
+            f"X: {rx}  Y: {ry}  W: {rw}  H: {rh}", parent=self.win)
+
     # ── 위젯 헬퍼 ────────────────────────────────
     def _frame(self, parent):
         return tk.Frame(parent, bg=self.C_BG, padx=4, pady=4)
@@ -1145,7 +1262,7 @@ class ConfigUI:
         ("F7",  "#cba6f7", "펫 업그레이드 · 마우스 루틴"),
         ("F8",  "#94e2d5", "@태초 채팅 전송"),
         ("F9",  "#a6e3a1", "메인 루프  시작 / 정지"),
-        ("F11", "#f5c2e7", "방장모드  시작 / 정지"),
+        ("F11", "#f5c2e7", "방장모드 / 따라가기  시작 / 정지"),
     ]
 
     def __init__(self, macro: "Macro") -> None:
@@ -1459,6 +1576,8 @@ class Macro:
         self._pet_t   = 0.0
         self._host_stop = threading.Event()
         self._f11thr: Optional[threading.Thread] = None
+        self._follow_stop = threading.Event()
+        self._follow_thr: Optional[threading.Thread] = None
         self._game_end_mode = False
         self._boss_select_active = False
         self._f9_press_time = 0.0
@@ -1682,9 +1801,16 @@ class Macro:
         self._f9thr.start()
 
     # ─────────────────────────────────────
-    # F11: 방장모드 시작/정지
+    # F11: 방장모드 / 따라가기 시작/정지
     # ─────────────────────────────────────
     def f11(self) -> None:
+        mode = self.cfg.get("f11_mode", "host")
+        if mode == "follow":
+            self._f11_follow()
+        else:
+            self._f11_host()
+
+    def _f11_host(self) -> None:
         if not self.cfg.get("gamemode_host_on", False):
             log.warning("F11: 방장모드 비활성 (설정에서 활성화 필요)")
             return
@@ -1702,6 +1828,120 @@ class Macro:
         self._host_stop.clear()
         self._f11thr = threading.Thread(target=self._host_loop, daemon=True)
         self._f11thr.start()
+
+    def _f11_follow(self) -> None:
+        if self._follow_thr and self._follow_thr.is_alive():
+            log.info("═══ F11 따라가기 정지 ═══")
+            self._follow_stop.set()
+            return
+
+        if not is_sc_active():
+            log.warning("F11(follow): 스타크래프트 비활성 - 무시")
+            return
+
+        follow_nickname = self.cfg.get("follow_nickname", "").strip()
+        if not follow_nickname:
+            log.warning("F11(follow): follow_nickname 미설정 (설정창에서 입력 필요)")
+            return
+
+        log.info("═══ F11 따라가기 시작 (닉네임: %s) ═══", follow_nickname)
+        self._follow_stop.clear()
+        self._follow_thr = threading.Thread(target=self._follow_loop, daemon=True)
+        self._follow_thr.start()
+
+    # ─────────────────────────────────────
+    # 따라가기 루프
+    # ─────────────────────────────────────
+    def _follow_loop(self) -> None:
+        FOLLOW_CONF = float(self.cfg.get("follow_confidence", 0.75))
+        nickname    = self.cfg.get("follow_nickname", "").strip()
+
+        def _full():
+            hwnd = _sc_find_hwnd()
+            if not hwnd:
+                return None
+            gx, gy, gw, gh = _sc_get_rect(hwnd)
+            return (gx, gy, gw, gh) if gw > 0 else None
+
+        log.info("═══ [따라가기] 루프 시작 ═══")
+        try:
+            reg = _full()
+            if not reg:
+                log.warning("[따라가기] SC 창을 찾을 수 없음")
+                return
+
+            # Step 1: AutoFollow_3 ("친구 [") 탐색 → 클릭
+            log.info("🔍 [따라가기] Step1: AutoFollow_3 탐색")
+            pos3 = self.finder.find("AutoFollow_3", FOLLOW_CONF, reg)
+            if pos3:
+                self.inp.click(int(pos3[0]), int(pos3[1]))
+                log.info("✅ [따라가기] AutoFollow_3 클릭 @ %s", pos3)
+                time.sleep(0.5)
+            else:
+                log.warning("[따라가기] AutoFollow_3 미발견 → 계속 진행")
+
+            # Step 2: 닉네임 Y좌표 OCR 탐색
+            log.info("🔍 [따라가기] Step2: 닉네임 '%s' OCR 탐색", nickname)
+            search_reg = self._abs_region("follow_search_region")
+            if not search_reg:
+                log.warning("[따라가기] follow_search_region 미설정 → 전체 창으로 fallback")
+                search_reg = reg
+
+            found_y = self._follow_find_nickname_y(search_reg, nickname)
+            if found_y is None:
+                log.warning("[따라가기] 닉네임 '%s' 미발견", nickname)
+                return
+            log.info("✅ [따라가기] 닉네임 발견 Y=%d", found_y)
+
+            # Step 3: 그 Y의 X축에서 AutoFollow_2 탐색 → 클릭
+            log.info("🔍 [따라가기] Step3: AutoFollow_2 탐색 (Y=%d)", found_y)
+            if not self._follow_click_arrow(reg, found_y, FOLLOW_CONF):
+                log.warning("[따라가기] AutoFollow_2 미발견 (Y=%d)", found_y)
+                return
+
+            log.info("✅ [따라가기] 완료")
+
+        except Exception as e:
+            log.error("[따라가기] 오류: %s", e, exc_info=True)
+
+        log.info("═══ [따라가기] 종료 ═══")
+
+    def _follow_find_nickname_y(self, region: tuple, nickname: str) -> Optional[int]:
+        """follow_search_region 내 OCR로 닉네임 행의 절대 Y 좌표 반환."""
+        px, py, pw, ph = region
+        shot  = pyautogui.screenshot(region=(px, py, pw, ph))
+        img   = cv2.cvtColor(np.array(shot), cv2.COLOR_RGB2GRAY)
+        _, img = cv2.threshold(img, 80, 255, cv2.THRESH_BINARY)
+        scale  = 2
+        img_big = cv2.resize(img, (pw * scale, ph * scale), interpolation=cv2.INTER_CUBIC)
+
+        data = pytesseract.image_to_data(
+            _PILImage.fromarray(img_big),
+            output_type=pytesseract.Output.DICT,
+            config="--psm 6 -c tessedit_char_whitelist=ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_'",
+        )
+
+        nick_lower = nickname.lower()
+        for i, text in enumerate(data["text"]):
+            t = text.strip().lower()
+            if not t:
+                continue
+            if nick_lower in t or difflib.SequenceMatcher(None, nick_lower, t).ratio() >= 0.70:
+                y_in_region = int(data["top"][i] / scale) + int(data["height"][i] / scale) // 2
+                return py + y_in_region
+        return None
+
+    def _follow_click_arrow(self, full_reg: tuple, target_y: int, conf: float) -> bool:
+        """target_y 행의 X축에서 AutoFollow_2(→ 버튼)를 탐색해 클릭."""
+        rx, ry, rw, rh = full_reg
+        strip_y = max(ry, target_y - 20)
+        strip_reg = (rx, strip_y, rw, 40)
+        pos = self.finder.find("AutoFollow_2", conf, strip_reg)
+        if pos:
+            self.inp.click(int(pos[0]), int(pos[1]))
+            log.info("✅ [따라가기] AutoFollow_2 클릭 @ (%d, %d)", pos[0], pos[1])
+            return True
+        return False
 
     def _host_loop(self) -> None:
         HOST_CONF = float(self.cfg.get("host_confidence", 0.65))
