@@ -1909,10 +1909,13 @@ class Macro:
     def _follow_find_nickname_y(self, region: tuple, nickname: str) -> Optional[int]:
         """follow_search_region 내 OCR로 닉네임 행의 절대 Y 좌표 반환."""
         px, py, pw, ph = region
-        shot  = pyautogui.screenshot(region=(px, py, pw, ph))
-        img   = cv2.cvtColor(np.array(shot), cv2.COLOR_RGB2GRAY)
-        _, img = cv2.threshold(img, 80, 255, cv2.THRESH_BINARY)
-        scale  = 2
+        shot = pyautogui.screenshot(region=(px, py, pw, ph))
+        bgr  = cv2.cvtColor(np.array(shot), cv2.COLOR_RGB2BGR)
+        # 흰색 마스크: 닉네임(흰색) 유지, 클랜태그(회색) 제거
+        hsv  = cv2.cvtColor(bgr, cv2.COLOR_BGR2HSV)
+        mask = (hsv[:, :, 2] > 180) & (hsv[:, :, 1] < 60)
+        img  = np.where(mask, np.uint8(255), np.uint8(0))
+        scale   = 2
         img_big = cv2.resize(img, (pw * scale, ph * scale), interpolation=cv2.INTER_CUBIC)
 
         data = pytesseract.image_to_data(
