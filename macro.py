@@ -1980,6 +1980,10 @@ class Macro:
                 # Step 3: 그 Y의 X축에서 AutoFollow_2 탐색 → 클릭
                 log.info("🔍 Step3: AutoFollow_2 탐색 (Y=%d)", found_y)
                 if self._follow_click_arrow(reg, found_y, FOLLOW_CONF):
+                    time.sleep(2.0)
+                    if self.cfg.get("auto_drive_on", False):
+                        log.info("🚗 [따라가기] 자동운행모드 → F6 입력")
+                        self.f6()
                     log.info("✅ [따라가기] 완료")
                     break
                 log.warning("AutoFollow_2 미발견 → Step1 재시도 (%d/20)", attempt)
