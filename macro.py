@@ -1885,7 +1885,7 @@ class Macro:
     def _follow_loop(self) -> None:
         FOLLOW_CONF = float(self.cfg.get("follow_confidence", 0.75))
         nickname    = self.cfg.get("follow_nickname", "").strip()
-        MAX_RETRY   = 10
+        MAX_RETRY   = 20
 
         def _full():
             hwnd = _sc_find_hwnd()
@@ -1929,9 +1929,9 @@ class Macro:
                 found_y = self._follow_find_nickname_y(search_reg, nickname)
                 if found_y is None:
                     step2_fails += 1
-                    log.warning("닉네임 '%s' 미발견 → Step1 재시도 (%d/5)", nickname, step2_fails)
-                    if step2_fails >= 5:
-                        log.warning("[따라가기] 닉네임 5회 미발견 → 루프 자동 종료")
+                    log.warning("닉네임 '%s' 미발견 → Step1 재시도 (%d/10)", nickname, step2_fails)
+                    if step2_fails >= 10:
+                        log.warning("[따라가기] 닉네임 10회 미발견 → 루프 자동 종료")
                         return
                     time.sleep(0.5)
                     continue
@@ -1943,10 +1943,10 @@ class Macro:
                 if self._follow_click_arrow(reg, found_y, FOLLOW_CONF):
                     log.info("✅ [따라가기] 완료")
                     break
-                log.warning("AutoFollow_2 미발견 → Step1 재시도 (%d/%d)", attempt, MAX_RETRY)
+                log.warning("AutoFollow_2 미발견 → Step1 재시도 (%d/20)", attempt)
                 time.sleep(0.5)
             else:
-                log.warning("[따라가기] %d회 시도 후 미발견 → 루프 자동 종료", MAX_RETRY)
+                log.warning("[따라가기] AutoFollow_2 20회 미발견 → 루프 자동 종료")
 
         except Exception as e:
             log.error("[따라가기] 오류: %s", e, exc_info=True)
