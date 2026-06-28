@@ -1911,9 +1911,9 @@ class Macro:
         px, py, pw, ph = region
         shot = pyautogui.screenshot(region=(px, py, pw, ph))
         bgr  = cv2.cvtColor(np.array(shot), cv2.COLOR_RGB2BGR)
-        # 흰색 마스크: 닉네임(흰색) 유지, 클랜태그(회색) 제거
+        # 밝은 텍스트 마스크: 닉네임(흰색/밝은회색) 유지, 클랜태그(어두운회색) 제거
         hsv  = cv2.cvtColor(bgr, cv2.COLOR_BGR2HSV)
-        mask = (hsv[:, :, 2] > 180) & (hsv[:, :, 1] < 60)
+        mask = (hsv[:, :, 2] > 140) & (hsv[:, :, 1] < 80)
         img  = np.where(mask, np.uint8(255), np.uint8(0))
         scale   = 2
         img_big = cv2.resize(img, (pw * scale, ph * scale), interpolation=cv2.INTER_CUBIC)
@@ -1938,7 +1938,7 @@ class Macro:
             if len(t) >= nlen:
                 for k in range(len(t) - nlen + 1):
                     sub = t[k:k + nlen]
-                    if difflib.SequenceMatcher(None, nick_lower, sub).ratio() >= 0.80:
+                    if difflib.SequenceMatcher(None, nick_lower, sub).ratio() >= 0.70:
                         return True
             return False
 
