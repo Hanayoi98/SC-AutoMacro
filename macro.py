@@ -241,6 +241,9 @@ DEFAULT_CONFIG: dict = {
     "discord_notify_on":  False,
     "discord_webhook_url": "",
     "discord_user_id":    "",
+    # ── Slack 알림 ──
+    "slack_notify_on":   False,
+    "slack_webhook_url": "",
 }
 
 
@@ -958,6 +961,11 @@ class SettingsWindow:
             ("알림기능",    "discord_notify_on",  "bool"),
             ("웹훅 URL",   "discord_webhook_url", "str"),
             ("사용자 ID",  "discord_user_id",     "str"),
+        ])
+        self._lbl(f, "[ Slack 알림 ]", bold=True, fg=self.C_ACC).pack(anchor="w", pady=(12,2), padx=10)
+        self._cfg_rows(f, [
+            ("알림기능",   "slack_notify_on",   "bool"),
+            ("웹훅 URL",  "slack_webhook_url",  "str"),
         ])
 
     # ── 공통: config 행 생성 ─────────────────────
@@ -1817,6 +1825,13 @@ class Macro:
                         requests.post(_url, json={"content": f"{_mention}✅ F7 루프 완료"}, timeout=5)
                     except Exception as _e:
                         log.warning("Discord 알림 실패: %s", _e)
+            if self.cfg.get("slack_notify_on", False):
+                _surl = self.cfg.get("slack_webhook_url", "").strip()
+                if _surl:
+                    try:
+                        requests.post(_surl, json={"text": "✅ F7 루프 완료"}, timeout=5)
+                    except Exception as _e:
+                        log.warning("Slack 알림 실패: %s", _e)
 
         except Exception as e:
             log.error("F6F7 오류: %s", e, exc_info=True)
