@@ -866,11 +866,12 @@ class SettingsWindow:
 
         # ── 방장모드 ───────────────────────────────
         tk.Frame(f, height=1, bg=self.C_BG3).pack(fill="x", padx=10, pady=(10,4))
-        self._lbl(f, "[ 방장모드 (f11_mode=host) ]", bold=True, fg=self.C_ACC).pack(anchor="w", pady=(4,2), padx=10)
+        self._lbl(f, "[ 방장모드 (f11_mode=host) ]", bold=True, fg=self.C_PINK).pack(anchor="w", pady=(4,2), padx=10)
         rows_host = [
-            ("방장모드 사용",   "gamemode_host_on", "bool"),
-            ("유저 닉네임",     "host_username",    "str"),
-            ("닉네임 인식률",   "host_confidence",  "num"),
+            ("방장모드 사용",      "gamemode_host_on",    "bool"),
+            ("유저 닉네임",        "host_username",       "str"),
+            ("닉네임 인식률",      "host_confidence",     "num"),
+            ("자동 보스 선택",     "auto_boss_select_on", "bool"),
         ]
         self._cfg_rows(f, rows_host)
 
@@ -900,12 +901,6 @@ class SettingsWindow:
         ]
         self._cfg_rows(f, rows_end)
 
-        tk.Frame(f, height=1, bg=self.C_BG3).pack(fill="x", padx=10, pady=(10,4))
-        self._lbl(f, "[ 자동 보스 선택 ]", bold=True, fg=self.C_ACC).pack(anchor="w", pady=(4,2), padx=10)
-        rows_boss = [
-            ("자동 보스 선택 사용", "auto_boss_select_on", "bool"),
-        ]
-        self._cfg_rows(f, rows_boss)
 
 
     # ── 탭 6: 고급1 (딜레이) ─────────────────────
@@ -1325,8 +1320,12 @@ class ConfigUI:
             row.pack(fill="x", padx=8, pady=2)
             badge = tk.Frame(row, bg=color, padx=5, pady=1)
             badge.pack(side="left")
-            tk.Label(badge, text=key, font=("Malgun Gothic",8,"bold"),
-                     bg=color, fg="#1e1e2e").pack()
+            blbl = tk.Label(badge, text=key, font=("Malgun Gothic",8,"bold"),
+                            bg=color, fg="#1e1e2e")
+            blbl.pack()
+            if key == "F11":
+                self._f11_badge_frame = badge
+                self._f11_badge_lbl   = blbl
             tk.Label(row, text=desc, font=self.FONT,
                      bg=self.C_BG2, fg=self.C_FG2).pack(side="left", padx=8)
 
@@ -1344,8 +1343,11 @@ class ConfigUI:
                                   command=self._toggle_f9)
         self._f9_btn.pack(side="left", padx=(0,6), fill="x", expand=True)
 
-        self._f11_btn = tk.Button(row1, text="♟  F11 방장", font=self.FONTB,
-                                   bg=self.C_BG3, fg=self.C_PINK,
+        _init_mode = macro.cfg.get("f11_mode", "host")
+        _f11_bg, _f11_txt = (self.C_GREEN, "→  F11 따라가기") if _init_mode == "follow" \
+                       else (self.C_PINK,  "♟  F11 방장")
+        self._f11_btn = tk.Button(row1, text=_f11_txt, font=self.FONTB,
+                                   bg=_f11_bg, fg="#1e1e2e",
                                    relief="flat", padx=14, pady=7,
                                    activebackground=self.C_BG4,
                                    cursor="hand2",
@@ -1466,13 +1468,27 @@ class ConfigUI:
             self._f9_btn.configure(text="▶  F9 시작", bg=self.C_GREEN, fg="#1e1e2e",
                                    activebackground="#b9f0c6")
 
-        # F11 방장모드 상태
-        if self.macro._f11thr and self.macro._f11thr.is_alive():
-            self._host_dot.configure(fg=self.C_PINK)
-            self._f11_btn.configure(text="■  F11 방장 정지", fg=self.C_RED)
-        else:
+        # F11 모드 + 실행 상태
+        _mode         = self.macro.cfg.get("f11_mode", "host")
+        _host_run     = bool(self.macro._f11thr   and self.macro._f11thr.is_alive())
+        _follow_run   = bool(self.macro._follow_thr and self.macro._follow_thr.is_alive())
+        _f11_color    = self.C_GREEN if _mode == "follow" else self.C_PINK
+        # 배지 색상 동기화
+        self._f11_badge_frame.configure(bg=_f11_color)
+        self._f11_badge_lbl.configure(bg=_f11_color)
+        if _host_run or _follow_run:
+            _stop_txt = "■  F11 방장 정지" if _mode == "host" else "■  F11 따라가기 정지"
+            self._f11_btn.configure(text=_stop_txt, bg=self.C_BG3,
+                                    fg=self.C_RED, activebackground=self.C_BG4)
+            self._host_dot.configure(fg=_f11_color)
+        elif _mode == "follow":
+            self._f11_btn.configure(text="→  F11 따라가기", bg=self.C_GREEN,
+                                    fg="#1e1e2e", activebackground="#b9f0c6")
             self._host_dot.configure(fg=self.C_BG4)
-            self._f11_btn.configure(text="♟  F11 방장", fg=self.C_PINK)
+        else:
+            self._f11_btn.configure(text="♟  F11 방장", bg=self.C_PINK,
+                                    fg="#1e1e2e", activebackground="#f7d0ee")
+            self._host_dot.configure(fg=self.C_BG4)
 
         # 로그 큐 → 텍스트 위젯 (로그 패널이 열려 있을 때만)
         if self._log_visible:
