@@ -250,3 +250,5 @@ _최종 업데이트: 2026-06-28 — v1.3: 초반분기 is_auto_sell_set 분기 
 _최종 업데이트: 2026-06-28 — v1.4: 따라가기 루프 재시도 구조 추가 (Step2 닉네임 미발견 시 Step1 재시도 최대 5회 / Step3 AutoFollow_2 미발견 시 Step1 재시도 최대 10회 / _follow_stop 체크 추가)_
 
 _최종 업데이트: 2026-06-28 — v1.4: F11 설정 구조 개편 — gamemode_host_on 제거 / f11_on(F11 사용 bool) 신규 추가 / _f11_host·_f11_follow 모두 f11_on 게이트 통일 / _game_end_check 보스선택 분기 f11_mode=="host" 조건으로 변경 / tesseract CMD 창 숨김(CREATE_NO_WINDOW)_
+
+_최종 업데이트: 2026-06-28 — v1.4: 자동보스선택 OCR 파싱 개선 — FIX1 억 앞 선행 0 감지(psm8 재시도) / FIX2 만 앞 >9999 숫자 감지(억 오인식 → psm8 재시도) / 1.5차 trim 4자리+ 조건 추가 및 1·2자리 순차 trim(SelectBoss_1~8 전체 8/8 통과)_

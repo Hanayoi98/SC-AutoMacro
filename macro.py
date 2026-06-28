@@ -2197,7 +2197,8 @@ class Macro:
             return 억_val + 만_val
 
         # 1.5차: 억 미인식 + 만 인식 시 — 억 오인식 digit 제거 후 재조합
-        # 예: "119억 6984만" → OCR "1194 6984 만" → n1=1194(마지막 digit=억 오인식), n2=6984
+        # 예: "119억 6984만" → OCR "1194 6984 만" / "193억 3723만" → "19398 3723 만"
+        # 3자리 이하(raw≤999)는 정상값으로 처리, 4자리+ 일 때만 trim 적용
         if m만:
             만_val = float(m만.group(1).replace(',', '')) / 10000.0
             before_만 = text[:m만.start()]
@@ -2205,10 +2206,15 @@ class Macro:
             if n1_list:
                 raw = n1_list[-1]
                 raw_str = str(raw)
-                if len(raw_str) > 1:
-                    trimmed = int(raw_str[:-1])   # 마지막 오인식 digit 제거
+                if len(raw_str) >= 4:
+                    for trim in range(1, min(len(raw_str) - 1, 3)):
+                        trimmed = int(raw_str[:-trim])
+                        if 1 <= trimmed <= 999:
+                            log.info("📋 [보스선택] 억 오인식 보정: %d → %d억 (trim=%d)", raw, trimmed, trim)
+                            return float(trimmed) + 만_val
+                    trimmed = int(raw_str[:-1])
                     if 1 <= trimmed <= 9999:
-                        log.info("📋 [보스선택] 억 오인식 보정: %d → %d억", raw, trimmed)
+                        log.info("📋 [보스선택] 억 오인식 보정(fallback): %d → %d억", raw, trimmed)
                         return float(trimmed) + 만_val
                 if 1 <= raw <= 9999:
                     return float(raw) + 만_val
@@ -2302,6 +2308,14 @@ class Macro:
             # 억 없고 만도 없지만 억 직접 매칭 성공 (만 없는 단일 억 케이스)
             if not _m만 and _m억_direct:
                 _valid = True
+            # [FIX1] 억 앞 숫자 선행 0 → 앞 digit 누락 오인식 → psm8 재시도
+            if _m억_direct and _m억_direct.group(1).startswith('0'):
+                _valid = False
+            # [FIX2] 억 미인식인데 만 앞 숫자 >9999 → 억 오인식 의심 → psm8 재시도
+            if _m억_direct is None and not _억_exists and _m만:
+                _before_만 = _t[:_m만.start()]
+                if any(int(n) > 9999 for n in re.findall(r'\d+', _before_만)):
+                    _valid = False
             if _valid:
                 ocr_text = _t
                 break
