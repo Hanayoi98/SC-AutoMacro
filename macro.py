@@ -2042,7 +2042,7 @@ class Macro:
         bgr  = cv2.cvtColor(np.array(shot), cv2.COLOR_RGB2BGR)
         # 밝은 텍스트 마스크: 닉네임(흰색/밝은회색) 유지, 클랜태그(어두운회색) 제거
         hsv  = cv2.cvtColor(bgr, cv2.COLOR_BGR2HSV)
-        mask = (hsv[:, :, 2] > 140) & (hsv[:, :, 1] < 80)
+        mask = (hsv[:, :, 2] > 80) & (hsv[:, :, 1] < 80)
         img  = np.where(mask, np.uint8(255), np.uint8(0))
         scale   = 2
         img_big = cv2.resize(img, (pw * scale, ph * scale), interpolation=cv2.INTER_CUBIC)
@@ -2071,13 +2071,17 @@ class Macro:
                         return True
             return False
 
-        for i, text in enumerate(data["text"]):
-            t = text.strip().lower()
-            if not t:
-                continue
-            if _fuzzy_match(t):
-                y_in_region = int(data["top"][i] / scale) + int(data["height"][i] / scale) // 2
-                return py + y_in_region
+        tokens = [(i, text.strip().lower()) for i, text in enumerate(data["text"]) if text.strip()]
+        for idx, (i, t) in enumerate(tokens):
+            candidates = [t]
+            if idx + 1 < len(tokens):
+                candidates.append(t + tokens[idx + 1][1])
+            if idx + 2 < len(tokens):
+                candidates.append(t + tokens[idx + 1][1] + tokens[idx + 2][1])
+            for c in candidates:
+                if _fuzzy_match(c):
+                    y_in_region = int(data["top"][i] / scale) + int(data["height"][i] / scale) // 2
+                    return py + y_in_region
         return None
 
     def _follow_click_arrow(self, full_reg: tuple, target_y: int, conf: float) -> bool:
