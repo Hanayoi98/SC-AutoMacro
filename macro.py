@@ -2071,12 +2071,15 @@ class Macro:
                         return True
             return False
 
-        tokens = [(i, text.strip().lower()) for i, text in enumerate(data["text"]) if text.strip()]
-        for idx, (i, t) in enumerate(tokens):
+        tokens = [
+            (i, text.strip().lower(), data["line_num"][i])
+            for i, text in enumerate(data["text"]) if text.strip()
+        ]
+        for idx, (i, t, ln) in enumerate(tokens):
             candidates = [t]
-            if idx + 1 < len(tokens):
+            if idx + 1 < len(tokens) and tokens[idx + 1][2] == ln:
                 candidates.append(t + tokens[idx + 1][1])
-            if idx + 2 < len(tokens):
+            if idx + 2 < len(tokens) and tokens[idx + 1][2] == ln and tokens[idx + 2][2] == ln:
                 candidates.append(t + tokens[idx + 1][1] + tokens[idx + 2][1])
             for c in candidates:
                 if _fuzzy_match(c):
