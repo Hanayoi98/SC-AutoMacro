@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-StarCraft Auto Macro v1.3
+StarCraft Auto Macro v1.4
 이미지 인식 기반 스타크래프트 자동화 매크로
 
 단축키
@@ -105,6 +105,17 @@ import pyperclip
 from mss import mss
 import pytesseract
 from PIL import Image as _PILImage
+import requests
+
+# tesseract.exe subprocess CMD 창 숨김 (Windows)
+if sys.platform == "win32":
+    import subprocess as _sub
+    _OrigPopenInit = _sub.Popen.__init__
+    def _PatchedPopenInit(self, args, **kwargs):
+        kwargs.setdefault("creationflags", 0)
+        kwargs["creationflags"] |= _sub.CREATE_NO_WINDOW
+        _OrigPopenInit(self, args, **kwargs)
+    _sub.Popen.__init__ = _PatchedPopenInit
 
 for _tp in [r"C:\Program Files\Tesseract-OCR\tesseract.exe",
              r"C:\Program Files (x86)\Tesseract-OCR\tesseract.exe"]:
@@ -190,6 +201,7 @@ DEFAULT_CONFIG: dict = {
     "f9_pet_interval":     200,
     "f9_pet_upgrade":      "e3",
     "box28_confidence_set": 0.97,
+    "auto_drive_on":        False,
     "f9_box28_monitor_on": True,
     "max_box":              28,
     "f9_early_branch_on":  True,
@@ -212,7 +224,7 @@ DEFAULT_CONFIG: dict = {
     "key_speed_delay":   1.0,
     "window_size":       [0, 0],
     # ── 게임모드 ──
-    "gamemode_host_on":       False,
+    "f11_on":                 False,
     "host_username":          "Hanayoi",
     "host_confidence":        0.65,
     "game_end_on":            False,
@@ -225,6 +237,13 @@ DEFAULT_CONFIG: dict = {
     "f7_input_delay":    0.15,
     "f7_step_delay":     0.2,
     "f7_mouse_move_dur": 0.05,
+    # ── Discord 알림 ──
+    "discord_notify_on":  False,
+    "discord_webhook_url": "",
+    "discord_user_id":    "",
+    # ── Slack 알림 ──
+    "slack_notify_on":   False,
+    "slack_webhook_url": "",
 }
 
 
@@ -233,6 +252,7 @@ _NUM_KEYS = {
     "f9_pet_interval":     int,
     "max_box":             int,
     "box28_confidence_set": float,
+    "auto_drive_on":        bool,
     "check_on_offset_x":   int,
     "check_on_offset_y":   int,
     "search_confidence":   float,
@@ -726,7 +746,7 @@ class SettingsWindow:
 
     C_BG = "#1e1e2e"; C_BG2 = "#313244"; C_BG3 = "#45475a"
     C_FG = "#cdd6f4"; C_FG2 = "#a6adc8"
-    C_ACC = "#89b4fa"; C_GREEN = "#a6e3a1"; C_RED = "#f38ba8"
+    C_ACC = "#89b4fa"; C_GREEN = "#a6e3a1"; C_RED = "#f38ba8"; C_PINK = "#f5c2e7"
     FONT  = ("Malgun Gothic", 9)
     FONTB = ("Malgun Gothic", 9, "bold")
 
@@ -759,9 +779,9 @@ class SettingsWindow:
 
         self._tab_window(nb)
         self._tab_coords(nb)
-        self._tab_f6(nb)
-        self._tab_f9(nb)
-        self._tab_gamemode(nb)
+        self._tab_keys(nb)
+        self._tab_gamemode1(nb)
+        self._tab_gamemode2(nb)
         self._tab_advanced1(nb)
         self._tab_advanced2(nb)
 
@@ -823,53 +843,84 @@ class SettingsWindow:
             tk.Label(row, textvariable=sv, font=self.FONT, bg=self.C_BG, fg=self.C_ACC, width=14, anchor="w").pack(side="left", padx=6)
             self._lbl(row, desc, fg=self.C_FG2).pack(side="left")
 
-    # ── 탭 3: F6 설정 ────────────────────────────
-    def _tab_f6(self, nb):
-        f = self._frame(nb); nb.add(f, text=" F6 설정 ")
-        rows = [
-            ("식별코드",        "id_code",          "str"),
-            ("F6 펫 업그레이드","f6_pet_upgrade",    "str"),
-            ("F6 마무리 동작",  "f6_final_action",   "str"),
-            ("채팅 매크로 사용","f6_chat_macro_on",  "bool"),
-            ("F7 자동 실행",    "f9_early_branch_on","bool"),
+    # ── 탭 3: 키 설정 (F6 + F9) ─────────────────
+    def _tab_keys(self, nb):
+        f = self._frame(nb); nb.add(f, text=" 키 설정 ")
+        self._lbl(f, "[ F6 설정 ]", bold=True, fg=self.C_ACC).pack(anchor="w", pady=(8,2), padx=10)
+        rows_f6 = [
+            ("식별코드",        "id_code",           "str"),
+            ("F6 펫 업그레이드","f6_pet_upgrade",     "str"),
+            ("F6 마무리 동작",  "f6_final_action",    "str"),
+            ("채팅 매크로 사용","f6_chat_macro_on",   "bool"),
+            ("F7 자동 실행",    "f9_early_branch_on", "bool"),
         ]
-        self._cfg_rows(f, rows)
-
-    # ── 탭 4: F9 설정 ────────────────────────────
-    def _tab_f9(self, nb):
-        f = self._frame(nb); nb.add(f, text=" F9 설정 ")
-        rows = [
-            ("펫 업그레이드 키",    "f9_pet_upgrade",      "str"),
-            ("펫 업그레이드 주기(초)","f9_pet_interval",   "num"),
-            ("Max Box 감시",        "f9_box28_monitor_on", "bool"),
-            ("Max Box 번호",        "max_box",             "num"),
+        self._cfg_rows(f, rows_f6)
+        tk.Frame(f, height=1, bg=self.C_BG3).pack(fill="x", padx=10, pady=(10,4))
+        self._lbl(f, "[ F9 설정 ]", bold=True, fg=self.C_ACC).pack(anchor="w", pady=(4,2), padx=10)
+        rows_f9 = [
+            ("펫 업그레이드 키",      "f9_pet_upgrade",      "str"),
+            ("펫 업그레이드 주기(초)", "f9_pet_interval",     "num"),
+            ("Max Box 감시",          "f9_box28_monitor_on", "bool"),
+            ("Max Box 번호",          "max_box",             "num"),
         ]
-        self._cfg_rows(f, rows)
+        self._cfg_rows(f, rows_f9)
 
-    # ── 탭 5: 게임모드 ───────────────────────────
-    def _tab_gamemode(self, nb):
-        f = self._frame(nb); nb.add(f, text=" 게임모드 ")
-        self._lbl(f, "[ 방장모드 (F11 토글) ]", bold=True, fg=self.C_ACC).pack(anchor="w", pady=(8,2), padx=10)
+    # ── 탭 4: 게임모드1 (F11 방장/따라가기) ─────────
+    def _tab_gamemode1(self, nb):
+        f = self._frame(nb); nb.add(f, text=" 게임모드1 ")
+
+        # ── F11 모드 선택 ──────────────────────────
+        self._lbl(f, "[ F11 실행모드 ]", bold=True, fg=self.C_ACC).pack(anchor="w", pady=(8,2), padx=10)
+        self._sv_map = getattr(self, "_sv_map", {})
+        self._cfg_rows(f, [("F11 사용", "f11_on", "bool")])
+        mode_row = tk.Frame(f, bg=self.C_BG); mode_row.pack(anchor="w", padx=10, pady=4)
+        self._lbl(mode_row, "실행 모드", width=20, anchor="w").pack(side="left")
+        _mode_sv = tk.StringVar(value=str(self.cfg.get("f11_mode", "host")))
+        self._sv_map["f11_mode"] = ("str", _mode_sv)
+        tk.Radiobutton(mode_row, text="방장모드", variable=_mode_sv, value="host",
+                       bg=self.C_BG, fg=self.C_PINK, selectcolor=self.C_BG2,
+                       activebackground=self.C_BG, font=self.FONT).pack(side="left", padx=(0,8))
+        tk.Radiobutton(mode_row, text="따라가기", variable=_mode_sv, value="follow",
+                       bg=self.C_BG, fg=self.C_GREEN, selectcolor=self.C_BG2,
+                       activebackground=self.C_BG, font=self.FONT).pack(side="left")
+
+        # ── 방장모드 ───────────────────────────────
+        tk.Frame(f, height=1, bg=self.C_BG3).pack(fill="x", padx=10, pady=(10,4))
+        self._lbl(f, "[ 방장모드 ]", bold=True, fg=self.C_PINK).pack(anchor="w", pady=(4,2), padx=10)
         rows_host = [
-            ("방장모드 사용",   "gamemode_host_on", "bool"),
-            ("유저 닉네임",     "host_username",    "str"),
-            ("닉네임 인식률",   "host_confidence",  "num"),
+            ("유저 닉네임",    "host_username",       "str"),
+            ("닉네임 인식률",  "host_confidence",     "num"),
+            ("자동 보스 선택", "auto_boss_select_on", "bool"),
         ]
         self._cfg_rows(f, rows_host)
 
+        # ── 따라가기 ───────────────────────────────
         tk.Frame(f, height=1, bg=self.C_BG3).pack(fill="x", padx=10, pady=(10,4))
-        self._lbl(f, "[ 게임종료 루프 ]", bold=True, fg=self.C_ACC).pack(anchor="w", pady=(4,2), padx=10)
+        self._lbl(f, "[ 따라가기 ]", bold=True, fg=self.C_GREEN).pack(anchor="w", pady=(4,2), padx=10)
+        rows_follow = [
+            ("따라갈 닉네임",      "follow_nickname",   "str"),
+            ("이미지 매칭 정확도", "follow_confidence", "num"),
+        ]
+        self._cfg_rows(f, rows_follow)
+
+        # 닉네임 탐색 영역 드래그 선택
+        reg_row = tk.Frame(f, bg=self.C_BG); reg_row.pack(anchor="w", padx=10, pady=4)
+        self._lbl(reg_row, "닉네임 탐색 영역", width=20, anchor="w").pack(side="left")
+        _cur_reg = self.cfg.get("follow_search_region", [0, 0, 0, 0])
+        self._follow_region_sv = tk.StringVar(
+            value=f"({_cur_reg[0]}, {_cur_reg[1]}, {_cur_reg[2]}, {_cur_reg[3]})"
+        )
+        self._lbl(reg_row, sv=self._follow_region_sv, fg=self.C_FG2).pack(side="left", padx=(4,8))
+        self._btn(reg_row, "드래그 선택", self._start_follow_region_drag).pack(side="left")
+
+    # ── 탭 5: 게임모드2 (게임종료·추가 예정) ────────
+    def _tab_gamemode2(self, nb):
+        f = self._frame(nb); nb.add(f, text=" 게임모드2 ")
+        self._lbl(f, "[ 게임종료 루프 ]", bold=True, fg=self.C_ACC).pack(anchor="w", pady=(8,2), padx=10)
         rows_end = [
             ("게임종료 루프 사용", "game_end_on", "bool"),
         ]
         self._cfg_rows(f, rows_end)
-
-        tk.Frame(f, height=1, bg=self.C_BG3).pack(fill="x", padx=10, pady=(10,4))
-        self._lbl(f, "[ 자동 보스 선택 ]", bold=True, fg=self.C_ACC).pack(anchor="w", pady=(4,2), padx=10)
-        rows_boss = [
-            ("자동 보스 선택 사용", "auto_boss_select_on", "bool"),
-        ]
-        self._cfg_rows(f, rows_boss)
 
 
     # ── 탭 6: 고급1 (딜레이) ─────────────────────
@@ -903,6 +954,19 @@ class SettingsWindow:
             ("speed 정확도 (0~1)", "speed_confidence",    "num"),
         ]
         self._cfg_rows(f, rows)
+        self._lbl(f, "[ 방장모드 ]", bold=True, fg=self.C_ACC).pack(anchor="w", pady=(12,2), padx=10)
+        self._cfg_rows(f, [("자동운행모드", "auto_drive_on", "bool")])
+        self._lbl(f, "[ Discord 알림 ]", bold=True, fg=self.C_ACC).pack(anchor="w", pady=(12,2), padx=10)
+        self._cfg_rows(f, [
+            ("알림기능",    "discord_notify_on",  "bool"),
+            ("웹훅 URL",   "discord_webhook_url", "str"),
+            ("사용자 ID",  "discord_user_id",     "str"),
+        ])
+        self._lbl(f, "[ Slack 알림 ]", bold=True, fg=self.C_ACC).pack(anchor="w", pady=(12,2), padx=10)
+        self._cfg_rows(f, [
+            ("알림기능",   "slack_notify_on",   "bool"),
+            ("웹훅 URL",  "slack_webhook_url",  "str"),
+        ])
 
     # ── 공통: config 행 생성 ─────────────────────
     def _cfg_rows(self, parent, rows):
@@ -1095,6 +1159,87 @@ class SettingsWindow:
             f"보스 루프 영역 저장 완료\n"
             f"X: {rx}  Y: {ry}\nW: {rw}  H: {rh}", parent=self.win)
 
+    # ── 닉네임 탐색 영역 드래그 선택 ─────────────
+    def _start_follow_region_drag(self):
+        self.win.iconify()
+        self.win.after(300, self._open_follow_drag_overlay)
+
+    def _open_follow_drag_overlay(self):
+        sw = self.win.winfo_screenwidth()
+        sh = self.win.winfo_screenheight()
+
+        ov = tk.Toplevel()
+        ov.attributes("-fullscreen", True)
+        ov.attributes("-topmost", True)
+        ov.attributes("-alpha", 0.25)
+        ov.configure(bg="black")
+        ov.config(cursor="crosshair")
+
+        canvas = tk.Canvas(ov, bg="black", highlightthickness=0)
+        canvas.pack(fill="both", expand=True)
+
+        canvas.create_text(
+            sw // 2, 40,
+            text="드래그하여 닉네임 탐색 영역을 선택하세요  |  ESC: 취소",
+            fill="white", font=("Malgun Gothic", 14, "bold")
+        )
+
+        state = {"x0": 0, "y0": 0, "rect": None}
+
+        def on_press(e):
+            state["x0"], state["y0"] = e.x, e.y
+            if state["rect"]:
+                canvas.delete(state["rect"])
+            state["rect"] = canvas.create_rectangle(
+                e.x, e.y, e.x, e.y,
+                outline="#a6e3a1", width=2, fill="#a6e3a1", stipple="gray25"
+            )
+
+        def on_drag(e):
+            if state["rect"]:
+                canvas.coords(state["rect"], state["x0"], state["y0"], e.x, e.y)
+
+        def on_release(e):
+            x0, y0 = min(state["x0"], e.x), min(state["y0"], e.y)
+            x1, y1 = max(state["x0"], e.x), max(state["y0"], e.y)
+            ov.destroy()
+            self.win.after(100, lambda: self._finish_follow_region_drag(x0, y0, x1, y1))
+
+        def on_esc(e):
+            ov.destroy()
+            self.win.deiconify()
+
+        canvas.bind("<ButtonPress-1>",   on_press)
+        canvas.bind("<B1-Motion>",       on_drag)
+        canvas.bind("<ButtonRelease-1>", on_release)
+        ov.bind("<Escape>", on_esc)
+        ov.focus_force()
+
+    def _finish_follow_region_drag(self, x0, y0, x1, y1):
+        hwnd = self._find_sc_hwnd()
+        if hwnd:
+            try:
+                gx, gy, _, _ = _sc_get_rect(hwnd)
+            except Exception:
+                gx, gy = 0, 0
+        else:
+            gx, gy = 0, 0
+
+        rx = x0 - gx
+        ry = y0 - gy
+        rw = x1 - x0
+        rh = y1 - y0
+
+        self.cfg["follow_search_region"] = [rx, ry, rw, rh]
+        if hasattr(self, "_follow_region_sv"):
+            self._follow_region_sv.set(f"({rx}, {ry}, {rw}, {rh})")
+
+        self.macro.save_config()
+        self.win.deiconify()
+        messagebox.showinfo("영역 저장",
+            f"닉네임 탐색 영역 저장 완료\n"
+            f"X: {rx}  Y: {ry}  W: {rw}  H: {rh}", parent=self.win)
+
     # ── 위젯 헬퍼 ────────────────────────────────
     def _frame(self, parent):
         return tk.Frame(parent, bg=self.C_BG, padx=4, pady=4)
@@ -1145,7 +1290,7 @@ class ConfigUI:
         ("F7",  "#cba6f7", "펫 업그레이드 · 마우스 루틴"),
         ("F8",  "#94e2d5", "@태초 채팅 전송"),
         ("F9",  "#a6e3a1", "메인 루프  시작 / 정지"),
-        ("F11", "#f5c2e7", "방장모드  시작 / 정지"),
+        ("F11", "#f5c2e7", "방장모드 / 따라가기  시작 / 정지"),
     ]
 
     def __init__(self, macro: "Macro") -> None:
@@ -1157,7 +1302,7 @@ class ConfigUI:
 
     def _build(self):
         r = self.root
-        r.title("SC Auto Macro  v1.3")
+        r.title("SC Auto Macro  v1.4")
         r.configure(bg=self.C_BG)
         r.attributes("-topmost", True)
         r.resizable(False, False)
@@ -1179,7 +1324,7 @@ class ConfigUI:
 
         ver_frame = tk.Frame(hdr, bg=self.C_BG3, padx=8, pady=4)
         ver_frame.pack(side="right", padx=16, pady=10)
-        tk.Label(ver_frame, text="v1.3", font=("Malgun Gothic",10,"bold"),
+        tk.Label(ver_frame, text="v1.4", font=("Malgun Gothic",10,"bold"),
                  bg=self.C_BG3, fg=self.C_ACC).pack()
 
         # ── 상태 표시 카드 ───────────────
@@ -1208,8 +1353,12 @@ class ConfigUI:
             row.pack(fill="x", padx=8, pady=2)
             badge = tk.Frame(row, bg=color, padx=5, pady=1)
             badge.pack(side="left")
-            tk.Label(badge, text=key, font=("Malgun Gothic",8,"bold"),
-                     bg=color, fg="#1e1e2e").pack()
+            blbl = tk.Label(badge, text=key, font=("Malgun Gothic",8,"bold"),
+                            bg=color, fg="#1e1e2e")
+            blbl.pack()
+            if key == "F11":
+                self._f11_badge_frame = badge
+                self._f11_badge_lbl   = blbl
             tk.Label(row, text=desc, font=self.FONT,
                      bg=self.C_BG2, fg=self.C_FG2).pack(side="left", padx=8)
 
@@ -1227,8 +1376,11 @@ class ConfigUI:
                                   command=self._toggle_f9)
         self._f9_btn.pack(side="left", padx=(0,6), fill="x", expand=True)
 
-        self._f11_btn = tk.Button(row1, text="♟  F11 방장", font=self.FONTB,
-                                   bg=self.C_BG3, fg=self.C_PINK,
+        _init_mode = self.macro.cfg.get("f11_mode", "host")
+        _f11_bg, _f11_txt = (self.C_GREEN, "→  F11 따라가기") if _init_mode == "follow" \
+                       else (self.C_PINK,  "♟  F11 방장")
+        self._f11_btn = tk.Button(row1, text=_f11_txt, font=self.FONTB,
+                                   bg=_f11_bg, fg="#1e1e2e",
                                    relief="flat", padx=14, pady=7,
                                    activebackground=self.C_BG4,
                                    cursor="hand2",
@@ -1311,7 +1463,7 @@ class ConfigUI:
     def _open_gamemode_settings(self):
         if self._settings is None:
             self._settings = SettingsWindow(self.macro, self.root)
-        self._settings.show_tab(4)
+        self._settings.show_tab(3)
 
     def _poll(self):
         """500ms 마다 F9 상태 + 로그 큐 일괄 갱신"""
@@ -1349,13 +1501,27 @@ class ConfigUI:
             self._f9_btn.configure(text="▶  F9 시작", bg=self.C_GREEN, fg="#1e1e2e",
                                    activebackground="#b9f0c6")
 
-        # F11 방장모드 상태
-        if self.macro._f11thr and self.macro._f11thr.is_alive():
-            self._host_dot.configure(fg=self.C_PINK)
-            self._f11_btn.configure(text="■  F11 방장 정지", fg=self.C_RED)
-        else:
+        # F11 모드 + 실행 상태
+        _mode         = self.macro.cfg.get("f11_mode", "host")
+        _host_run     = bool(self.macro._f11thr   and self.macro._f11thr.is_alive())
+        _follow_run   = bool(self.macro._follow_thr and self.macro._follow_thr.is_alive())
+        _f11_color    = self.C_GREEN if _mode == "follow" else self.C_PINK
+        # 배지 색상 동기화
+        self._f11_badge_frame.configure(bg=_f11_color)
+        self._f11_badge_lbl.configure(bg=_f11_color)
+        if _host_run or _follow_run:
+            _stop_txt = "■  F11 방장 정지" if _mode == "host" else "■  F11 따라가기 정지"
+            self._f11_btn.configure(text=_stop_txt, bg=self.C_BG3,
+                                    fg=self.C_RED, activebackground=self.C_BG4)
+            self._host_dot.configure(fg=_f11_color)
+        elif _mode == "follow":
+            self._f11_btn.configure(text="→  F11 따라가기", bg=self.C_GREEN,
+                                    fg="#1e1e2e", activebackground="#b9f0c6")
             self._host_dot.configure(fg=self.C_BG4)
-            self._f11_btn.configure(text="♟  F11 방장", fg=self.C_PINK)
+        else:
+            self._f11_btn.configure(text="♟  F11 방장", bg=self.C_PINK,
+                                    fg="#1e1e2e", activebackground="#f7d0ee")
+            self._host_dot.configure(fg=self.C_BG4)
 
         # 로그 큐 → 텍스트 위젯 (로그 패널이 열려 있을 때만)
         if self._log_visible:
@@ -1459,6 +1625,10 @@ class Macro:
         self._pet_t   = 0.0
         self._host_stop = threading.Event()
         self._f11thr: Optional[threading.Thread] = None
+        self._follow_stop = threading.Event()
+        self._follow_thr: Optional[threading.Thread] = None
+        self._f6f7_stop = threading.Event()
+        self._f6f7_thr: Optional[threading.Thread] = None
         self._game_end_mode = False
         self._boss_select_active = False
         self._f9_press_time = 0.0
@@ -1545,79 +1715,128 @@ class Macro:
     # F6: 채팅 + 식별코드 입력
     # ─────────────────────────────────────
     def f6(self) -> None:
+        if self._f6f7_thr and self._f6f7_thr.is_alive():
+            log.info("═══ F6F7 정지 ═══")
+            self._f6f7_stop.set()
+            return
         if not is_sc_active():
             log.warning("F6: 스타크래프트 비활성 - 무시")
             return
-        log.info("═══ F6 시작 ═══")
-        try:
-            chat_on = self.cfg.get("f6_chat_macro_on", True)
+        self._f6f7_stop.clear()
+        self._f6f7_thr = threading.Thread(
+            target=self._f6f7_loop, kwargs={"start_at_f7": False}, daemon=True)
+        self._f6f7_thr.start()
 
-            if chat_on:
-                # ① 채팅창 열기
-                self.inp.press("enter")              # input_delay 후
-
-                # ② @자동1 입력 (SendInput 유니코드 직접 주입)
-                self.inp.paste_text("@자동1")        # 글자당 input_delay
-
-                # ③ 전송
-                self.inp.press("enter")              # input_delay 후
-                time.sleep(self.cfg.get("step_delay", 0.2))                     # 전송 후 고정 대기
-
-            # ④ 0: 부대지정 호출 (게임 단축키)
-            self.inp.press("0")                     # input_delay 후
-            time.sleep(self.cfg.get("step_delay", 0.2))                         # UI 열릴 때까지 고정 대기
-
-            # ⑤ 식별코드 입력 (ENTER 없음 / SendInput 유니코드 직접 주입)
-            _type_unicode(str(self.cfg["id_code"]), delay=self.inp.delay)
-
-            log.info("F6 완료 (채팅매크로=%s)", chat_on)
-
-            # ⑥ 자동 분기 → F7 실행
-            if self.cfg.get("f9_early_branch_on", False):
-                log.info("→ 자동 분기: F7 실행")
-                self.f7()
-
-        except Exception as e:
-            log.error("F6 오류: %s", e, exc_info=True)
-
-    # ─────────────────────────────────────
-    # F7: autosetting 대기 → 업그레이드 → 마우스 루틴
-    # ─────────────────────────────────────
     def f7(self) -> None:
+        if self._f6f7_thr and self._f6f7_thr.is_alive():
+            log.info("═══ F6F7 정지 ═══")
+            self._f6f7_stop.set()
+            return
         if not is_sc_active():
             log.warning("F7: 스타크래프트 비활성 - 무시")
             return
-        log.info("═══ F7 시작 ═══")
+        self._f6f7_stop.clear()
+        self._f6f7_thr = threading.Thread(
+            target=self._f6f7_loop, kwargs={"start_at_f7": True}, daemon=True)
+        self._f6f7_thr.start()
+
+    def _f6f7_loop(self, start_at_f7: bool = False) -> None:
+        log.info("═══ F6F7 루프 시작 (start_at_f7=%s) ═══", start_at_f7)
         try:
-            # key 이미지가 화면에 나타날 때까지 대기 (F9 stop 이벤트와 무관)
-            log.info("key 이미지 대기 중...")
-            gr = self._abs_region("region_game")
-            pos = self.finder.wait("key", region=gr)   # stop_event 없음 → 발견까지 무한 대기
-            if not pos:
-                log.warning("key 발견 실패")
-                return
-            log.info("key 발견: %s", pos)
+            if not start_at_f7:
+                # ── F6 구간 ──────────────────────────────
+                # AutoStart_2 감지 대기 (boss_loop 영역)
+                _hwnd = _sc_find_hwnd()
+                if not _hwnd:
+                    log.warning("[F6] SC 창을 찾을 수 없음")
+                    return
+                gx, gy, gw, gh = _sc_get_rect(_hwnd)
+                rx = float(self.cfg.get("boss_loop_rx", 0.2677))
+                ry = float(self.cfg.get("boss_loop_ry", 0.2494))
+                rw = float(self.cfg.get("boss_loop_rw", 0.4553))
+                rh = float(self.cfg.get("boss_loop_rh", 0.3024))
+                detect_reg = (int(gx+gw*rx), int(gy+gh*ry), int(gw*rw), int(gh*rh))
 
+                log.info("🔍 [F6] AutoStart_2 대기 중...")
+                pos = self.finder.wait("AutoStart_2", region=detect_reg,
+                                       stop_event=self._f6f7_stop)
+                if not pos or self._f6f7_stop.is_set():
+                    log.info("[F6] 정지 또는 미감지")
+                    return
+                log.info("✅ [F6] AutoStart_2 감지 @ %s → sleep(1.0)", pos)
+                time.sleep(1.0)
+                if self._f6f7_stop.is_set():
+                    return
+
+                chat_on = self.cfg.get("f6_chat_macro_on", True)
+                if chat_on:
+                    self.inp.press("enter")
+                    self.inp.paste_text("@자동1")
+                    self.inp.press("enter")
+                    time.sleep(self.cfg.get("step_delay", 0.2))
+
+                self.inp.press("0")
+                time.sleep(self.cfg.get("step_delay", 0.2))
+                _type_unicode(str(self.cfg["id_code"]), delay=self.inp.delay)
+                log.info("✅ [F6] 완료 (채팅매크로=%s)", chat_on)
+
+                if not self.cfg.get("f9_early_branch_on", False):
+                    log.info("═══ F6F7 종료 (F7 미사용) ═══")
+                    return
+
+                if self._f6f7_stop.is_set():
+                    return
+
+            # ── F7 구간 ──────────────────────────────
+            log.info("═══ [F7] 시작 ═══")
             sd = self.cfg.get("f7_step_delay", 0.2)
-            self.inp_f7.press("f2");  time.sleep(sd)
-            self.inp_f7.press("2");   time.sleep(sd)
+            gr = self._abs_region("region_game")
 
-            # 초반 펫 업그레이드 문자열
-            self.inp_f7.type_seq(self.cfg.get("f6_pet_upgrade", ""))
+            # 재시작 시 화면 F2 재고정
+            self.inp_f7.press("f2")
             time.sleep(sd)
 
-            self.inp_f7.press("3");   time.sleep(sd)
+            log.info("🔍 [F7] key 이미지 대기 중...")
+            pos = self.finder.wait("key", region=gr, stop_event=self._f6f7_stop)
+            if not pos or self._f6f7_stop.is_set():
+                log.info("[F7] 정지 또는 key 미발견")
+                return
+            log.info("✅ [F7] key 발견 @ %s", pos)
 
-            # 마무리 동작 문자열
+            self.inp_f7.press("f2");  time.sleep(sd)
+            self.inp_f7.press("2");   time.sleep(sd)
+            self.inp_f7.type_seq(self.cfg.get("f6_pet_upgrade", ""))
+            time.sleep(sd)
+            self.inp_f7.press("3");   time.sleep(sd)
             self.inp_f7.type_seq(self.cfg.get("f6_final_action", ""))
             time.sleep(sd)
 
-            # 마우스 루틴
+            if self._f6f7_stop.is_set():
+                return
+
             self._f7_mouse_routine()
-            log.info("F7 완료")
+            log.info("✅ [F7] 완료")
+            if self.cfg.get("discord_notify_on", False):
+                _url = self.cfg.get("discord_webhook_url", "").strip()
+                _uid = self.cfg.get("discord_user_id", "").strip()
+                if _url:
+                    _mention = f"<@{_uid}> " if _uid else ""
+                    try:
+                        requests.post(_url, json={"content": f"{_mention}✅ F7 루프 완료"}, timeout=5)
+                    except Exception as _e:
+                        log.warning("Discord 알림 실패: %s", _e)
+            if self.cfg.get("slack_notify_on", False):
+                _surl = self.cfg.get("slack_webhook_url", "").strip()
+                if _surl:
+                    try:
+                        requests.post(_surl, json={"text": "✅ F7 루프 완료"}, timeout=5)
+                    except Exception as _e:
+                        log.warning("Slack 알림 실패: %s", _e)
 
         except Exception as e:
-            log.error("F7 오류: %s", e, exc_info=True)
+            log.error("F6F7 오류: %s", e, exc_info=True)
+
+        log.info("═══ F6F7 루프 종료 ═══")
 
     def _f7_mouse_routine(self) -> None:
         """
@@ -1682,11 +1901,21 @@ class Macro:
         self._f9thr.start()
 
     # ─────────────────────────────────────
-    # F11: 방장모드 시작/정지
+    # F11: 방장모드 / 따라가기 시작/정지
     # ─────────────────────────────────────
     def f11(self) -> None:
-        if not self.cfg.get("gamemode_host_on", False):
-            log.warning("F11: 방장모드 비활성 (설정에서 활성화 필요)")
+        if self._f6f7_thr and self._f6f7_thr.is_alive():
+            log.info("[F11] F6F7 대기 중 → 자동 정지")
+            self._f6f7_stop.set()
+        mode = self.cfg.get("f11_mode", "host")
+        if mode == "follow":
+            self._f11_follow()
+        else:
+            self._f11_host()
+
+    def _f11_host(self) -> None:
+        if not self.cfg.get("f11_on", False):
+            log.warning("F11: 비활성 (설정에서 F11 사용 활성화 필요)")
             return
 
         if self._f11thr and self._f11thr.is_alive():
@@ -1702,6 +1931,165 @@ class Macro:
         self._host_stop.clear()
         self._f11thr = threading.Thread(target=self._host_loop, daemon=True)
         self._f11thr.start()
+
+    def _f11_follow(self) -> None:
+        if not self.cfg.get("f11_on", False):
+            log.warning("F11: 비활성 (설정에서 F11 사용 활성화 필요)")
+            return
+
+        if self._follow_thr and self._follow_thr.is_alive():
+            log.info("═══ F11 따라가기 정지 ═══")
+            self._follow_stop.set()
+            return
+
+        if not is_sc_active():
+            log.warning("F11(follow): 스타크래프트 비활성 - 무시")
+            return
+
+        follow_nickname = self.cfg.get("follow_nickname", "").strip()
+        if not follow_nickname:
+            log.warning("F11(follow): follow_nickname 미설정 (설정창에서 입력 필요)")
+            return
+
+        log.info("═══ F11 따라가기 시작 (닉네임: %s) ═══", follow_nickname)
+        self._follow_stop.clear()
+        self._follow_thr = threading.Thread(target=self._follow_loop, daemon=True)
+        self._follow_thr.start()
+
+    # ─────────────────────────────────────
+    # 따라가기 루프
+    # ─────────────────────────────────────
+    def _follow_loop(self) -> None:
+        FOLLOW_CONF = float(self.cfg.get("follow_confidence", 0.75))
+        nickname    = self.cfg.get("follow_nickname", "").strip()
+        MAX_RETRY   = 20
+
+        def _full():
+            hwnd = _sc_find_hwnd()
+            if not hwnd:
+                return None
+            gx, gy, gw, gh = _sc_get_rect(hwnd)
+            return (gx, gy, gw, gh) if gw > 0 else None
+
+        log.info("═══ [따라가기] 루프 시작 ═══")
+        try:
+            reg = _full()
+            if not reg:
+                log.warning("[따라가기] SC 창을 찾을 수 없음")
+                return
+
+            search_reg = self._abs_region("follow_search_region")
+            if not search_reg:
+                log.warning("[따라가기] follow_search_region 미설정 → 전체 창으로 fallback")
+                search_reg = reg
+
+            step2_fails = 0
+            for attempt in range(1, MAX_RETRY + 1):
+                if self._follow_stop.is_set():
+                    log.info("[따라가기] 정지 요청")
+                    break
+
+                log.info("─── [따라가기] 시도 %d/%d ───", attempt, MAX_RETRY)
+
+                # Step 1: AutoFollow_3 ("친구 [") 탐색 → 클릭
+                log.info("🔍 Step1: AutoFollow_3 탐색")
+                pos3 = self.finder.find("AutoFollow_3", FOLLOW_CONF, reg)
+                if pos3:
+                    self.inp.click(int(pos3[0]), int(pos3[1]))
+                    log.info("✅ AutoFollow_3 클릭 @ %s", pos3)
+                    time.sleep(0.5)
+                else:
+                    log.warning("AutoFollow_3 미발견 → 계속 진행")
+
+                # Step 2: 닉네임 Y좌표 OCR 탐색
+                log.info("🔍 Step2: 닉네임 '%s' OCR 탐색", nickname)
+                found_y = self._follow_find_nickname_y(search_reg, nickname)
+                if found_y is None:
+                    step2_fails += 1
+                    log.warning("닉네임 '%s' 미발견 → Step1 재시도 (%d/10)", nickname, step2_fails)
+                    if step2_fails >= 10:
+                        log.warning("[따라가기] 닉네임 10회 미발견 → 루프 자동 종료")
+                        return
+                    time.sleep(0.5)
+                    continue
+                step2_fails = 0
+                log.info("✅ 닉네임 발견 Y=%d", found_y)
+
+                # Step 3: 그 Y의 X축에서 AutoFollow_2 탐색 → 클릭
+                log.info("🔍 Step3: AutoFollow_2 탐색 (Y=%d)", found_y)
+                if self._follow_click_arrow(reg, found_y, FOLLOW_CONF):
+                    time.sleep(2.0)
+                    if self.cfg.get("auto_drive_on", False):
+                        log.info("🚗 [따라가기] 자동운행모드 → F6 입력")
+                        self.f6()
+                    log.info("✅ [따라가기] 완료")
+                    break
+                log.warning("AutoFollow_2 미발견 → Step1 재시도 (%d/20)", attempt)
+                time.sleep(0.5)
+            else:
+                log.warning("[따라가기] AutoFollow_2 20회 미발견 → 루프 자동 종료")
+
+        except Exception as e:
+            log.error("[따라가기] 오류: %s", e, exc_info=True)
+
+        log.info("═══ [따라가기] 종료 ═══")
+
+    def _follow_find_nickname_y(self, region: tuple, nickname: str) -> Optional[int]:
+        """follow_search_region 내 OCR로 닉네임 행의 절대 Y 좌표 반환."""
+        px, py, pw, ph = region
+        shot = pyautogui.screenshot(region=(px, py, pw, ph))
+        bgr  = cv2.cvtColor(np.array(shot), cv2.COLOR_RGB2BGR)
+        # 밝은 텍스트 마스크: 닉네임(흰색/밝은회색) 유지, 클랜태그(어두운회색) 제거
+        hsv  = cv2.cvtColor(bgr, cv2.COLOR_BGR2HSV)
+        mask = (hsv[:, :, 2] > 140) & (hsv[:, :, 1] < 80)
+        img  = np.where(mask, np.uint8(255), np.uint8(0))
+        scale   = 2
+        img_big = cv2.resize(img, (pw * scale, ph * scale), interpolation=cv2.INTER_CUBIC)
+
+        data = pytesseract.image_to_data(
+            _PILImage.fromarray(img_big),
+            output_type=pytesseract.Output.DICT,
+            config="--psm 6 -c tessedit_char_whitelist=ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_'",
+        )
+
+        nick_lower = nickname.lower()
+        nlen = len(nick_lower)
+
+        def _fuzzy_match(t: str) -> bool:
+            # 1. 정확한 substring 포함
+            if nick_lower in t:
+                return True
+            # 2. 전체 문자열 유사도 0.70 이상
+            if difflib.SequenceMatcher(None, nick_lower, t).ratio() >= 0.70:
+                return True
+            # 3. 복합 OCR 문자열 내 슬라이딩 윈도우 (게임 폰트 오인식 보정)
+            if len(t) >= nlen:
+                for k in range(len(t) - nlen + 1):
+                    sub = t[k:k + nlen]
+                    if difflib.SequenceMatcher(None, nick_lower, sub).ratio() >= 0.70:
+                        return True
+            return False
+
+        for i, text in enumerate(data["text"]):
+            t = text.strip().lower()
+            if not t:
+                continue
+            if _fuzzy_match(t):
+                y_in_region = int(data["top"][i] / scale) + int(data["height"][i] / scale) // 2
+                return py + y_in_region
+        return None
+
+    def _follow_click_arrow(self, full_reg: tuple, target_y: int, conf: float) -> bool:
+        """target_y 행의 X축에서 AutoFollow_2(→ 버튼)를 탐색해 클릭."""
+        rx, ry, rw, rh = full_reg
+        strip_y = max(ry, target_y - 40)
+        strip_reg = (rx, strip_y, rw, 80)
+        pos = self.finder.find("AutoFollow_2", conf, strip_reg)
+        if pos:
+            self.inp.click(int(pos[0]), int(pos[1]))
+            log.info("✅ [따라가기] AutoFollow_2 클릭 @ (%d, %d)", pos[0], pos[1])
+            return True
+        return False
 
     def _host_loop(self) -> None:
         HOST_CONF = float(self.cfg.get("host_confidence", 0.65))
@@ -1835,6 +2223,9 @@ class Macro:
                     log.info("🎯 [방장] 전원 확인 (%s) → 3.0s 후 Host_4 클릭", ", ".join(found))
                     time.sleep(3.0)
                     _click_and_wait("Host_4", 0.5)
+                    if self.cfg.get("auto_drive_on", False):
+                        log.info("🚗 [방장] 자동운행모드 → F6 입력")
+                        self.f6()
                     break
                 else:
                     log.info("⏳ [방장] 미확인 인원 있음 → 재탐색")
@@ -1890,7 +2281,8 @@ class Macro:
             return 억_val + 만_val
 
         # 1.5차: 억 미인식 + 만 인식 시 — 억 오인식 digit 제거 후 재조합
-        # 예: "119억 6984만" → OCR "1194 6984 만" → n1=1194(마지막 digit=억 오인식), n2=6984
+        # 예: "119억 6984만" → OCR "1194 6984 만" / "193억 3723만" → "19398 3723 만"
+        # 3자리 이하(raw≤999)는 정상값으로 처리, 4자리+ 일 때만 trim 적용
         if m만:
             만_val = float(m만.group(1).replace(',', '')) / 10000.0
             before_만 = text[:m만.start()]
@@ -1898,10 +2290,15 @@ class Macro:
             if n1_list:
                 raw = n1_list[-1]
                 raw_str = str(raw)
-                if len(raw_str) > 1:
-                    trimmed = int(raw_str[:-1])   # 마지막 오인식 digit 제거
+                if len(raw_str) >= 4:
+                    for trim in range(1, min(len(raw_str) - 1, 3)):
+                        trimmed = int(raw_str[:-trim])
+                        if 1 <= trimmed <= 999:
+                            log.info("📋 [보스선택] 억 오인식 보정: %d → %d억 (trim=%d)", raw, trimmed, trim)
+                            return float(trimmed) + 만_val
+                    trimmed = int(raw_str[:-1])
                     if 1 <= trimmed <= 9999:
-                        log.info("📋 [보스선택] 억 오인식 보정: %d → %d억", raw, trimmed)
+                        log.info("📋 [보스선택] 억 오인식 보정(fallback): %d → %d억", raw, trimmed)
                         return float(trimmed) + 만_val
                 if 1 <= raw <= 9999:
                     return float(raw) + 만_val
@@ -1995,6 +2392,14 @@ class Macro:
             # 억 없고 만도 없지만 억 직접 매칭 성공 (만 없는 단일 억 케이스)
             if not _m만 and _m억_direct:
                 _valid = True
+            # [FIX1] 억 앞 숫자 선행 0 → 앞 digit 누락 오인식 → psm8 재시도
+            if _m억_direct and _m억_direct.group(1).startswith('0'):
+                _valid = False
+            # [FIX2] 억 미인식인데 만 앞 숫자 >9999 → 억 오인식 의심 → psm8 재시도
+            if _m억_direct is None and not _억_exists and _m만:
+                _before_만 = _t[:_m만.start()]
+                if any(int(n) > 9999 for n in re.findall(r'\d+', _before_만)):
+                    _valid = False
             if _valid:
                 ocr_text = _t
                 break
@@ -2100,7 +2505,7 @@ class Macro:
             )
             if self.finder.find("SelectBoss_0", 0.80, boss_reg):
                 log.info("🎮 [종료] SelectBoss_0 감지")
-                if self.cfg.get("gamemode_host_on", False):
+                if self.cfg.get("f11_mode", "host") == "host":
                     self._boss_select_active = True
                     if self.cfg.get("auto_boss_select_on", False):
                         log.info("🎯 [보스선택] 방장모드 + 자동보스선택 ON → 보스선택 시작")
@@ -2153,8 +2558,8 @@ class Macro:
         self.inp.press("q");     time.sleep(3.0)
         self.inp.press("enter"); time.sleep(0.5)
 
-        if self.cfg.get("gamemode_host_on", False):
-            log.info("♟️ [종료] 방장모드 ON → F11 직접 호출")
+        if self.cfg.get("f11_on", False):
+            log.info("♟️ [종료] f11_on → F11 직접 호출")
             threading.Thread(target=self.f11, daemon=True).start()
 
         log.info("✅ [종료] 게임 종료 시퀀스 완료")
@@ -2378,7 +2783,7 @@ class Macro:
     # ─────────────────────────────────────
     def start(self) -> None:
         log.info("╔══════════════════════════════════╗")
-        log.info("║  StarCraft Auto Macro  v1.0      ║")
+        log.info("║  StarCraft Auto Macro  v1.4      ║")
         log.info("╚══════════════════════════════════╝")
         log.info("F6/F7/F8/F9 : 각 기능 | Ctrl+F11 : 설정 창 | Ctrl+F12 : 종료")
 
