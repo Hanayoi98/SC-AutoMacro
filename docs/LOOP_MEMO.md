@@ -89,22 +89,40 @@ count 이미지 우측(+2px) 12×14px 영역 픽셀 스캔
 
 ---
 
-## F6 루틴
-```
-f6_chat_macro_on=True → ENTER → @자동1 → ENTER (+step_delay)
-0키 (+step_delay)
-id_code 입력 (SendInput)
-f9_early_branch_on=True → f7() 자동 실행
-```
+## F6F7 루틴 (`_f6f7_loop`)
 
-## F7 루틴
+F6/F7 키 공통 토글 스레드 (`_f6f7_thr` + `_f6f7_stop`)
+실행 중 재입력 → 정지 / 정지 후 재입력 → 처음부터 시작
+
 ```
-key 이미지 대기 (무한, region_game)
-F2 → 2 → f6_pet_upgrade → 3 → f6_final_action  (딜레이: f7_step_delay)
-_f7_mouse_routine():  (마우스 이동: f7_mouse_move_dur / 클릭·키 딜레이: 고정 0.45s)
-  coord_a 이동 → 더블클릭(0.45s) → Q(0.45s)
-  coord_b 이동 → 더블클릭(0.45s) → Q(0.45s)
-  coord_c 이동 → (싱글클릭(0.45s) → Q(0.45s)) × 4
+F6 키 입력
+  _f6f7_thr 실행 중 → 정지
+  미실행 → start_at_f7=False 로 _f6f7_loop 시작
+
+F7 키 입력
+  _f6f7_thr 실행 중 → 정지
+  미실행 → start_at_f7=True 로 _f6f7_loop 시작
+
+_f6f7_loop(start_at_f7=False):
+  ── F6 구간 ──
+  SC 창 hwnd 획득 실패 → 종료
+  boss_loop 영역(rx/ry/rw/rh)에서 AutoStart_2 대기 (_f6f7_stop 체크)
+  감지 → sleep(1.0)
+  f6_chat_macro_on=True → ENTER → @자동1 → ENTER (+step_delay)
+  0키 (+step_delay) → id_code 입력 (SendInput)
+  f9_early_branch_on=False → 종료
+
+  ── F7 구간 ──
+  F2 (화면 재고정)  ← 재시작 시 F2-locked 상태 해제/재설정
+  key 이미지 대기 (region_game, _f6f7_stop 체크)
+  key 발견 → F2 → 2 → f6_pet_upgrade → 3 → f6_final_action (f7_step_delay)
+  _f7_mouse_routine():
+    coord_a → 더블클릭(0.45s) → Q(0.45s)
+    coord_b → 더블클릭(0.45s) → Q(0.45s)
+    coord_c → (싱글클릭(0.45s) → Q(0.45s)) × 4
+
+_f6f7_loop(start_at_f7=True):
+  F6 구간 생략 → F7 구간만 실행 (F2 재고정부터)
 ```
 
 ### F7 전용 딜레이 설정키
@@ -140,9 +158,9 @@ ENTER → @태초 → ENTER
 |---|---|
 | 창 크기 | SC 창 해상도 |
 | 좌표 설정 | A/B/C/M/ON 좌표 |
-| F6 설정 | 채팅·식별코드·분기 |
-| F9 설정 | 펫·28box 감시 |
-| 게임모드 | 방장모드 ON/OFF · 유저 닉네임 · 게임종료 루프 ON/OFF |
+| 키 설정 | F6 설정 + F9 설정 통합 |
+| 게임모드1 | F11 모드 선택(방장/따라가기) · 방장모드 · 따라가기 설정 |
+| 게임모드2 | 게임종료 루프 ON/OFF · (추가 예정) |
 | 고급1 | F9/F7 딜레이 |
 | 고급2 | 이미지 매칭 정확도 (나머지/box/count/speed) |
 
@@ -237,8 +255,24 @@ F9 루프 내에서 동작. `game_end_on=True` 일 때 활성화.
 
 ---
 
-_최종 업데이트: 2026-06-27 — v1.1: F11 방장모드 추가 (OCR 닉네임 전원 확인 후 Host_4 클릭) / Host_3 템플릿 슬롯 블랙아웃 처리 / difflib 유사도 매칭 적용_
+_최종 업데이트: 2026-06-27 — v1.3: F11 방장모드 추가 (OCR 닉네임 전원 확인 / Host_3 슬롯 블랙아웃 / difflib 유사도 매칭) / 게임종료 루프 추가 (SelectBoss_0→BossClear_2→종료 시퀀스) / 👑 방장설정 버튼 메인창 추가_
 
-_최종 업데이트: 2026-06-27 — v1.3: 게임종료 루프 추가 (SelectBoss_0→BossClear_2→종료 시퀀스) / F9 루프 게임종료 모드 전환 구조 / f10 내부명 → f11/gamemode 리네임 / print screen 키명 수정 / 👑 방장설정 버튼 메인창 추가_
+_최종 업데이트: 2026-06-28 — v1.3: 초반분기 is_auto_sell_set 분기 / 딜량 OCR 개선 (3배 확대·LSTM·psm8 재시도) / 따라가기 모드 추가 (F11 host/follow 분기 / AutoFollow_3→OCR→AutoFollow_2) / OCR 전처리 흰색 마스크(HSV V>140,S<80) 클랜태그 제거 / F11 UI 모드별 색상(방장=핑크·따라가기=초록) / 설정탭 개편(키 설정 통합·게임모드1·2 분리)_
 
-_최종 업데이트: 2026-06-28 — v1.4: 초반분기 is_auto_sell_set 분기 추가 (True 시 열쇠탐색 없이 변환루트 / False+열쇠없음 시 변환루트) / _NUM_KEYS에 boss_loop_rx/ry/rw/rh, host_confidence 추가 / boss_loop_r* float() 변환 누락 수정_
+---
+
+**v1.3 최종 확정 — 이후 수정은 v1.4부터 진행**
+
+---
+
+_최종 업데이트: 2026-06-28 — v1.4: 따라가기 루프 재시도 구조 추가 (Step2 닉네임 미발견 시 Step1 재시도 최대 5회 / Step3 AutoFollow_2 미발견 시 Step1 재시도 최대 10회 / _follow_stop 체크 추가)_
+
+_최종 업데이트: 2026-06-28 — v1.4: F11 설정 구조 개편 — gamemode_host_on 제거 / f11_on(F11 사용 bool) 신규 추가 / _f11_host·_f11_follow 모두 f11_on 게이트 통일 / _game_end_check 보스선택 분기 f11_mode=="host" 조건으로 변경 / tesseract CMD 창 숨김(CREATE_NO_WINDOW)_
+
+_최종 업데이트: 2026-06-28 — v1.4: 자동보스선택 OCR 파싱 개선 — FIX1 억 앞 선행 0 감지(psm8 재시도) / FIX2 만 앞 >9999 숫자 감지(억 오인식 → psm8 재시도) / 1.5차 trim 4자리+ 조건 추가 및 1·2자리 순차 trim(SelectBoss_1~8 전체 8/8 통과)_
+
+_최종 업데이트: 2026-06-28 — v1.4: 방장모드·따라가기모드 자동운행모드 추가 — Host_4 클릭+0.5s / AutoFollow_2 클릭+2.0s 후 auto_drive_on=True 시 F6 자동 입력 / 고급2 탭에 자동운행모드 체크박스 추가_
+
+_최종 업데이트: 2026-06-28 — v1.4: F11 입력 시 F6F7 대기 자동 정지 — f11() 진입 시 _f6f7_thr 실행 중이면 _f6f7_stop.set() 으로 F6 이미지 대기 즉시 종료_
+
+_최종 업데이트: 2026-06-28 — v1.4: Discord + Slack 알림 추가 — F7 완료 시 각각 독립 ON/OFF / 고급2 탭에 Discord·Slack 섹션 추가_
