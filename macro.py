@@ -43,6 +43,7 @@ _REQUIRED_PACKAGES = [
     ("mss",          "mss"),
     ("pytesseract",  "pytesseract"),
     ("PIL",          "Pillow"),
+    ("requests",     "requests"),
 ]
 
 
