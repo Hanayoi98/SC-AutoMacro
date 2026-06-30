@@ -180,7 +180,7 @@ class App:
         # 2. pip install — 진행 바 indeterminate로 전환 후 실시간 스트리밍
         PACKAGES = [
             "opencv-python", "numpy", "keyboard",
-            "pyautogui", "pyperclip", "mss", "pytesseract", "Pillow",
+            "pyautogui", "pyperclip", "mss", "pytesseract", "Pillow", "requests",
         ]
         self.root.after(0, lambda: self._pbar.config(mode="indeterminate", value=0))
         self.root.after(0, self._pbar.start)
