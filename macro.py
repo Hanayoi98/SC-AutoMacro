@@ -22,7 +22,19 @@ import threading
 import subprocess
 import queue
 import difflib
+import traceback
 from typing import List, Optional, Tuple
+
+# 시작 크래시 로그 (pythonw 환경에서 에러 확인용)
+def _crash_handler(exc_type, exc_val, exc_tb):
+    _log_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "crash_log.txt")
+    try:
+        with open(_log_path, "w", encoding="utf-8") as _f:
+            traceback.print_exception(exc_type, exc_val, exc_tb, file=_f)
+    except Exception:
+        pass
+    sys.__excepthook__(exc_type, exc_val, exc_tb)
+sys.excepthook = _crash_handler
 
 # ──────────────────────────────────────────────────────────
 # 패키지 자동 설치 (외부 라이브러리 import 전에 실행)
