@@ -2414,8 +2414,8 @@ class Macro:
                 _man_nums = re.findall(r'\d+', _right_txt)
                 if _eok_nums:
                     _eok_str = _eok_nums[-1]
-                    # 억 앞 숫자는 4자리 이하여야 함 (9999억 초과 불가)
-                    if len(_eok_str) <= 4 and 1 <= int(_eok_str) <= 9999:
+                    # 억 앞 숫자: 4자리 이상 or 1000 초과 시 오인식으로 판단
+                    if len(_eok_str) < 4 and 1 <= int(_eok_str) <= 1000:
                         _eok_val = int(_eok_str)
                         _man_val = 0.0
                         if _man_nums:
@@ -2426,7 +2426,7 @@ class Macro:
                         log.info("💥 [보스선택] 억 템플릿 파싱: %d억 + %.4f억 = %.4f억",
                                  _eok_val, _man_val, party_dps)
                     else:
-                        log.warning("⚠️ [보스선택] 억 앞 숫자 범위 초과 (%s) → fallback", _eok_str)
+                        log.warning("⚠️ [보스선택] 억 앞 숫자 오인식 (4자리 이상 or 1000 초과: %s) → fallback", _eok_str)
 
         # ── 2단계: 템플릿 매칭 실패 시 기존 OCR fallback ──────────
         if party_dps <= 0:
