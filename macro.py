@@ -2565,10 +2565,17 @@ class Macro:
             _post_key("w", 0.5)
 
         if self.cfg.get("auto_boss_run_on", False):
-            log.info("🎮 [보스실행] 4.0s 대기 후 L키 입력")
-            time.sleep(4.0)
-            _post_key("l", 5.0)
-            log.info("✅ [보스실행] L키 입력 완료 → 게임 시작")
+            log.info("🎮 [보스실행] 3.0s 대기 후 L키 다운")
+            time.sleep(3.0)
+            _vk_l = _VK.get("l")
+            if _vk_l and hwnd:
+                _u32.PostMessageW(hwnd, _WM_KEYDOWN, _vk_l, 0)
+                time.sleep(0.3)
+                _u32.PostMessageW(hwnd, _WM_KEYUP, _vk_l, 0)
+            else:
+                self.inp.press("l", 0.3)
+            time.sleep(5.0)
+            log.info("✅ [보스실행] L키 완료 → 게임 시작")
         else:
             log.info("✅ [보스선택] 완료 → %s %s 대기 (L은 수동 입력)",
                      DIFF_NAMES[diff_idx], BOSS_NAMES[boss_idx])
