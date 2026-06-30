@@ -230,6 +230,7 @@ DEFAULT_CONFIG: dict = {
     "host_confidence":        0.65,
     "game_end_on":            False,
     "auto_boss_select_on":    False,
+    "auto_boss_run_on":       False,
     "boss_loop_rx":           0.2677,
     "boss_loop_ry":           0.2494,
     "boss_loop_rw":           0.4553,
@@ -894,6 +895,32 @@ class SettingsWindow:
             ("자동 보스 선택", "auto_boss_select_on", "bool"),
         ]
         self._cfg_rows(f, rows_host)
+
+        # 자동 보스 실행 (자동 보스 선택 ON 시에만 활성화)
+        _brun_row = tk.Frame(f, bg=self.C_BG); _brun_row.pack(fill="x", padx=10, pady=4)
+        self._lbl(_brun_row, "자동 보스 실행", width=20, anchor="w").pack(side="left")
+        _brun_val = self.cfg.get("auto_boss_run_on", False)
+        _brun_sv  = tk.BooleanVar(value=bool(_brun_val))
+        self._sv_map["auto_boss_run_on"] = ("bool", _brun_sv)
+        _brun_cb  = tk.Checkbutton(_brun_row, variable=_brun_sv, bg=self.C_BG, fg=self.C_FG,
+                                   selectcolor=self.C_BG2, activebackground=self.C_BG,
+                                   font=self.FONT)
+        _brun_cb.pack(side="left")
+
+        _bsel_sv = self._sv_map["auto_boss_select_on"][1]
+        def _on_bsel_change(*_):
+            if _bsel_sv.get():
+                _brun_cb.config(state="normal")
+            else:
+                _brun_sv.set(False)
+                _brun_cb.config(state="disabled")
+        _bsel_sv.trace_add("write", _on_bsel_change)
+        _on_bsel_change()
+
+        # 주의 문구
+        _warn_row = tk.Frame(f, bg=self.C_BG); _warn_row.pack(fill="x", padx=10, pady=(0, 4))
+        tk.Label(_warn_row, text="⚠ 충분한 딜량 측정 확인없이 사용주의",
+                 fg="red", bg=self.C_BG, font=self.FONT).pack(anchor="w", padx=168)
 
         # ── 따라가기 ───────────────────────────────
         tk.Frame(f, height=1, bg=self.C_BG3).pack(fill="x", padx=10, pady=(10,4))
@@ -2525,8 +2552,14 @@ class Macro:
             log.info("⬆️ [보스선택] W (%d/%d)", i + 1, diff_idx)
             _post_key("w", 0.5)
 
-        log.info("✅ [보스선택] 완료 → %s %s 대기 (L은 수동 입력)",
-                 DIFF_NAMES[diff_idx], BOSS_NAMES[boss_idx])
+        if self.cfg.get("auto_boss_run_on", False):
+            log.info("🎮 [보스실행] 4.0s 대기 후 L키 입력")
+            time.sleep(4.0)
+            _post_key("l", 5.0)
+            log.info("✅ [보스실행] L키 입력 완료 → 게임 시작")
+        else:
+            log.info("✅ [보스선택] 완료 → %s %s 대기 (L은 수동 입력)",
+                     DIFF_NAMES[diff_idx], BOSS_NAMES[boss_idx])
 
     def _game_end_check(self, reg, is_active: bool) -> tuple:
         """
