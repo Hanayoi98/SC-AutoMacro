@@ -2370,9 +2370,9 @@ class Macro:
         gx, gy, gw, gh = reg
         sb0_left, sb0_top, sb0_w, sb0_h = sb0_box
         ocr_x = max(0, sb0_left + sb0_w)
-        ocr_y = max(0, sb0_top - 5)
+        ocr_y = max(0, sb0_top - 15)
         ocr_w = min(500, int(gx + gw) - ocr_x)
-        ocr_h = sb0_h + 10
+        ocr_h = sb0_h + 25
         shot = pyautogui.screenshot(region=(ocr_x, ocr_y, ocr_w, ocr_h))
         raw_gray = cv2.cvtColor(np.array(shot), cv2.COLOR_RGB2GRAY)
 
@@ -2404,24 +2404,36 @@ class Macro:
             if _max_val >= 0.65:
                 _eok_x = _max_loc[0]
                 _eok_right = _eok_x + _tmpl_gray.shape[1]
-                # 억 왼쪽: 억 값 숫자 (최대 4자리 → 최대 약 120px 확보)
-                _left = raw_gray[:, max(0, _eok_x - 150):_eok_x]
-                # 억 오른쪽: 만 값 숫자
-                _right = raw_gray[:, _eok_right:min(raw_gray.shape[1], _eok_right + 200)]
-                _left_txt  = _ocr_digits(_left,  "억앞")
-                _right_txt = _ocr_digits(_right, "억뒤(만)")
+                # SB0 오른쪽 끝 ~ SB1 왼쪽: 억 값 숫자
+                _left = raw_gray[:, :_eok_x]
+                _left_txt = _ocr_digits(_left, "억값")
                 _eok_nums = re.findall(r'\d+', _left_txt)
-                _man_nums = re.findall(r'\d+', _right_txt)
+
+                # SB1 오른쪽 영역에서 SelectBoss_2("만") 위치 탐색 → 만 값
+                _right_region = raw_gray[:, _eok_right:]
+                _man_val = 0.0
+                _tmpl_sb2 = self.finder._get_tmpl("SelectBoss_2")
+                if _tmpl_sb2 is not None:
+                    _tmpl_sb2_g = cv2.cvtColor(_tmpl_sb2, cv2.COLOR_BGR2GRAY)
+                    if (_right_region.shape[0] >= _tmpl_sb2_g.shape[0] and
+                            _right_region.shape[1] >= _tmpl_sb2_g.shape[1]):
+                        _res2 = cv2.matchTemplate(_right_region, _tmpl_sb2_g, cv2.TM_CCOEFF_NORMED)
+                        _, _v2, _, _loc2 = cv2.minMaxLoc(_res2)
+                        log.info("📋 [보스선택] 만 템플릿 매칭: %.3f @ %s", _v2, _loc2)
+                        if _v2 >= 0.65:
+                            _mid = _right_region[:, :_loc2[0]]
+                            _mid_txt  = _ocr_digits(_mid, "만값")
+                            _man_nums = re.findall(r'\d+', _mid_txt)
+                            if _man_nums:
+                                _m_str = _man_nums[-1]
+                                if len(_m_str) <= 4 and 0 <= int(_m_str) <= 9999:
+                                    _man_val = int(_m_str) / 10000.0
+
                 if _eok_nums:
                     _eok_str = _eok_nums[-1]
                     # 억 앞 숫자: 4자리 이상 or 1000 초과 시 오인식으로 판단
                     if len(_eok_str) < 4 and 1 <= int(_eok_str) <= 1000:
                         _eok_val = int(_eok_str)
-                        _man_val = 0.0
-                        if _man_nums:
-                            _m = int(_man_nums[0])
-                            if 0 <= _m <= 9999:
-                                _man_val = _m / 10000.0
                         party_dps = float(_eok_val) + _man_val
                         log.info("💥 [보스선택] 억 템플릿 파싱: %d억 + %.4f억 = %.4f억",
                                  _eok_val, _man_val, party_dps)
