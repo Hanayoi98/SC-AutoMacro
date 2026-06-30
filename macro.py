@@ -2570,11 +2570,10 @@ class Macro:
             _vk_l = _VK.get("l")
             if _vk_l and hwnd:
                 _u32.PostMessageW(hwnd, _WM_KEYDOWN, _vk_l, 0)
-                time.sleep(0.3)
+                time.sleep(5.0)
                 _u32.PostMessageW(hwnd, _WM_KEYUP, _vk_l, 0)
             else:
-                self.inp.press("l", 0.3)
-            time.sleep(5.0)
+                self.inp.press("l", 5.0)
             log.info("✅ [보스실행] L키 완료 → 게임 시작")
         else:
             log.info("✅ [보스선택] 완료 → %s %s 대기 (L은 수동 입력)",
