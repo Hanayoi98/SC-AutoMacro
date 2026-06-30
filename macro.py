@@ -2369,63 +2369,89 @@ class Macro:
         # 3. 파티 딜량 OCR (템플릿 우측 끝에서 시작 → 딜량 숫자 영역만 크롭)
         gx, gy, gw, gh = reg
         sb0_left, sb0_top, sb0_w, sb0_h = sb0_box
-        ocr_x = max(0, sb0_left + sb0_w)        # 템플릿 우측 끝
+        ocr_x = max(0, sb0_left + sb0_w)
         ocr_y = max(0, sb0_top - 5)
-        ocr_w = min(500, int(gx + gw) - ocr_x)  # 숫자 영역 최대 500px
+        ocr_w = min(500, int(gx + gw) - ocr_x)
         ocr_h = sb0_h + 10
         shot = pyautogui.screenshot(region=(ocr_x, ocr_y, ocr_w, ocr_h))
-        img = cv2.cvtColor(np.array(shot), cv2.COLOR_RGB2GRAY)
-        _, img = cv2.threshold(img, 0, 255, cv2.THRESH_BINARY | cv2.THRESH_OTSU)
-        img = cv2.resize(img, (ocr_w * 3, ocr_h * 3), interpolation=cv2.INTER_CUBIC)
-        # psm7 먼저, 아래 조건 중 하나라도 해당되면 psm8 재시도
-        #   ① 만 값 > 9999 (노이즈로 자릿수 증가)
-        #   ② 억이 OCR에 있으나 digit 직전 매칭 실패 (예: "11 디 억" → "9"→"디" 오인식)
-        pil_img = _PILImage.fromarray(img)
-        ocr_text = ""
-        for _cfg in ["--oem 3 --psm 7", "--oem 3 --psm 8"]:
-            try:
-                _t = pytesseract.image_to_string(pil_img, lang="kor+eng", config=_cfg).strip()
-            except Exception:
-                _t = ""
-            log.info("📋 [보스선택] OCR [%s]: %r", _cfg.split()[-1], _t)
-            if not _t:
-                continue
-            _m만 = re.search(r'([\d,]+)\s*만', _t)
-            _만_val = int(_m만.group(1).replace(',', '')) if _m만 else -1
-            _m억_direct = re.search(r'([\d,]+)\s*억', _t)
-            _억_exists = '억' in _t
-            # 채택 조건: (억 직접 매칭 성공 + 만 유효/없음) OR (억 없음 + 만 유효)
-            _valid = (_m억_direct is not None and (not _m만 or 0 <= _만_val <= 9999)) or \
-                     (_m억_direct is None and not _억_exists and 0 <= _만_val <= 9999)
-            # 억 없고 만도 없지만 억 직접 매칭 성공 (만 없는 단일 억 케이스)
-            if not _m만 and _m억_direct:
-                _valid = True
-            # [FIX1] 억 앞 숫자 선행 0 → 앞 digit 누락 오인식 → psm8 재시도
-            if _m억_direct and _m억_direct.group(1).startswith('0'):
-                _valid = False
-            # [FIX2] 억 미인식인데 만 앞 숫자 >9999 → 억 오인식 의심 → psm8 재시도
-            if _m억_direct is None and not _억_exists and _m만:
-                _before_만 = _t[:_m만.start()]
-                if any(int(n) > 9999 for n in re.findall(r'\d+', _before_만)):
-                    _valid = False
-            if _valid:
-                ocr_text = _t
-                break
-            if not ocr_text:
-                ocr_text = _t
-        if not ocr_text:
-            try:
-                ocr_text = pytesseract.image_to_string(
-                    pil_img, config="--psm 7 -c tessedit_char_whitelist=0123456789,.: "
-                ).strip()
-                log.info("📋 [보스선택] 한글 OCR 불가 → 숫자 전용 fallback: %r", ocr_text)
-                if not any(c.isdigit() for c in ocr_text):
-                    ocr_text = pytesseract.image_to_string(pil_img, config="--psm 7").strip()
-            except Exception:
-                pass
-        log.info("📋 [보스선택] 딜량 OCR: %r", ocr_text)
+        raw_gray = cv2.cvtColor(np.array(shot), cv2.COLOR_RGB2GRAY)
 
-        party_dps = self._parse_dps_억(ocr_text)
+        def _ocr_digits(crop: np.ndarray, label: str) -> str:
+            if crop.size == 0:
+                return ""
+            _, bw = cv2.threshold(crop, 0, 255, cv2.THRESH_BINARY | cv2.THRESH_OTSU)
+            h, w = bw.shape
+            big = cv2.resize(bw, (max(1, w * 3), max(1, h * 3)), interpolation=cv2.INTER_CUBIC)
+            try:
+                txt = pytesseract.image_to_string(
+                    _PILImage.fromarray(big),
+                    config="--oem 3 --psm 7 -c tessedit_char_whitelist=0123456789,"
+                ).strip().replace(",", "").replace(" ", "")
+            except Exception:
+                txt = ""
+            log.info("📋 [보스선택] %s OCR: %r", label, txt)
+            return txt
+
+        party_dps = 0.0
+
+        # ── 1단계: SelectBoss_1("억") 템플릿 매칭 ──────────────────
+        _tmpl_color = self.finder._get_tmpl("SelectBoss_1")
+        if _tmpl_color is not None:
+            _tmpl_gray = cv2.cvtColor(_tmpl_color, cv2.COLOR_BGR2GRAY)
+            _res = cv2.matchTemplate(raw_gray, _tmpl_gray, cv2.TM_CCOEFF_NORMED)
+            _, _max_val, _, _max_loc = cv2.minMaxLoc(_res)
+            log.info("📋 [보스선택] 억 템플릿 매칭: %.3f @ %s", _max_val, _max_loc)
+            if _max_val >= 0.65:
+                _eok_x = _max_loc[0]
+                _eok_right = _eok_x + _tmpl_gray.shape[1]
+                # 억 왼쪽: 억 값 숫자 (최대 4자리 → 최대 약 120px 확보)
+                _left = raw_gray[:, max(0, _eok_x - 150):_eok_x]
+                # 억 오른쪽: 만 값 숫자
+                _right = raw_gray[:, _eok_right:min(raw_gray.shape[1], _eok_right + 200)]
+                _left_txt  = _ocr_digits(_left,  "억앞")
+                _right_txt = _ocr_digits(_right, "억뒤(만)")
+                _eok_nums = re.findall(r'\d+', _left_txt)
+                _man_nums = re.findall(r'\d+', _right_txt)
+                if _eok_nums:
+                    _eok_str = _eok_nums[-1]
+                    # 억 앞 숫자는 4자리 이하여야 함 (9999억 초과 불가)
+                    if len(_eok_str) <= 4 and 1 <= int(_eok_str) <= 9999:
+                        _eok_val = int(_eok_str)
+                        _man_val = 0.0
+                        if _man_nums:
+                            _m = int(_man_nums[0])
+                            if 0 <= _m <= 9999:
+                                _man_val = _m / 10000.0
+                        party_dps = float(_eok_val) + _man_val
+                        log.info("💥 [보스선택] 억 템플릿 파싱: %d억 + %.4f억 = %.4f억",
+                                 _eok_val, _man_val, party_dps)
+                    else:
+                        log.warning("⚠️ [보스선택] 억 앞 숫자 범위 초과 (%s) → fallback", _eok_str)
+
+        # ── 2단계: 템플릿 매칭 실패 시 기존 OCR fallback ──────────
+        if party_dps <= 0:
+            _, _img_bin = cv2.threshold(raw_gray, 0, 255, cv2.THRESH_BINARY | cv2.THRESH_OTSU)
+            _img_big = cv2.resize(_img_bin, (ocr_w * 3, ocr_h * 3), interpolation=cv2.INTER_CUBIC)
+            _pil = _PILImage.fromarray(_img_big)
+            _ocr_text = ""
+            for _cfg in ["--oem 3 --psm 7", "--oem 3 --psm 8"]:
+                try:
+                    _t = pytesseract.image_to_string(_pil, lang="kor+eng", config=_cfg).strip()
+                except Exception:
+                    _t = ""
+                log.info("📋 [보스선택] fallback OCR [%s]: %r", _cfg.split()[-1], _t)
+                if _t:
+                    _ocr_text = _t
+                    break
+            if not _ocr_text:
+                try:
+                    _ocr_text = pytesseract.image_to_string(
+                        _pil, config="--psm 7 -c tessedit_char_whitelist=0123456789,.: "
+                    ).strip()
+                except Exception:
+                    pass
+            log.info("📋 [보스선택] fallback 딜량 OCR: %r", _ocr_text)
+            party_dps = self._parse_dps_억(_ocr_text)
         if party_dps <= 0:
             log.warning("⚠️ [보스선택] 딜량 파싱 실패 (%r) → 중단", ocr_text)
             return
