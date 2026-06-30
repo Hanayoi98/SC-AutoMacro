@@ -920,7 +920,7 @@ class SettingsWindow:
         # 주의 문구
         _warn_row = tk.Frame(f, bg=self.C_BG); _warn_row.pack(fill="x", padx=10, pady=(0, 4))
         tk.Label(_warn_row, text="⚠ 충분한 딜량 측정 확인없이 사용주의",
-                 fg="red", bg=self.C_BG, font=self.FONT).pack(anchor="w", padx=168)
+                 fg="red", bg=self.C_BG, font=self.FONT).pack(anchor="w", padx=10)
 
         # ── 따라가기 ───────────────────────────────
         tk.Frame(f, height=1, bg=self.C_BG3).pack(fill="x", padx=10, pady=(10,4))
