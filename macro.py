@@ -300,7 +300,7 @@ def _coerce_types(cfg: dict) -> dict:
 def load_config() -> dict:
     """config.json 로드, 없으면 기본값으로 생성"""
     if os.path.exists(CONFIG_PATH):
-        with open(CONFIG_PATH, encoding="utf-8") as f:
+        with open(CONFIG_PATH, encoding="utf-8-sig") as f:
             cfg = json.load(f)
         for k, v in DEFAULT_CONFIG.items():
             cfg.setdefault(k, v)
